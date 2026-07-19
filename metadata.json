@@ -1,0 +1,6 @@
+{
+  "name": "Firefly Junior Broker",
+  "description": "A gamified, full-stack multi-profile brokerage sandbox for kids integrated with self-hosted Firefly III ledgers and live stock charts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
