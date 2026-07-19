@@ -55,6 +55,7 @@ export interface PortfolioSnapshot {
 export interface StockInfo {
   ticker: string;
   name: string;
+  heName?: string;
   description: string;
   childAnalogy: string;
   sector: string;
@@ -64,6 +65,9 @@ export interface StockInfo {
 export interface StockQuote {
   ticker: string;
   name: string;
+  heName?: string;
+  logo?: string;
+  sector?: string;
   priceUsd: number;
   changePercent: number;
   high24h: number;

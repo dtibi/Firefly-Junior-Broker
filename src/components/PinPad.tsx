@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Lock, X, Delete } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface PinPadProps {
   title?: string;
@@ -22,6 +23,7 @@ export default function PinPad({
   onCancel,
   error: initialError,
 }: PinPadProps) {
+  const { t } = useTranslation();
   const [pin, setPin] = useState<string>('');
   const [error, setError] = useState<string | null>(initialError || null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
@@ -66,7 +68,7 @@ export default function PinPad({
         <div className="flex justify-between items-center mb-4">
           <div className="flex items-center gap-2 text-amber-500 font-bold text-lg">
             <Lock className="w-5 h-5 text-amber-400" />
-            <span>Parent & Kid Security</span>
+            <span>{t('pinPad.security')}</span>
           </div>
           <button
             onClick={onCancel}
@@ -129,7 +131,7 @@ export default function PinPad({
             className="h-16 rounded-2xl bg-red-50 hover:bg-red-100 text-xs font-black text-red-600 active:scale-95 transition-all flex items-center justify-center cursor-pointer"
             disabled={isVerifying}
           >
-            CLEAR
+            {t('pinPad.clear')}
           </button>
           <button
             onClick={() => handleNumberClick('0')}
@@ -149,7 +151,7 @@ export default function PinPad({
 
         <div className="text-center">
           <p className="text-[10px] text-slate-400 font-semibold tracking-wide">
-            PROTECTED BY BANK OF DAD LEDGER DEPLOYMENT
+            {t('pinPad.protectedBy')}
           </p>
         </div>
       </motion.div>

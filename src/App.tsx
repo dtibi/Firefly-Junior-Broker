@@ -28,15 +28,19 @@ import {
   PlusCircle,
   HelpCircle,
   CheckCircle2,
-  Briefcase
+  Briefcase,
+  Languages,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Profile, Holding, Transaction, StockQuote, PortfolioSnapshot } from './types.js';
 import PinPad from './components/PinPad.tsx';
 import AiCoachModal from './components/AiCoachModal.tsx';
 import PerformanceChart from './components/PerformanceChart.tsx';
+import { useTranslation } from './i18n/useTranslation';
 
 export default function App() {
+  const { t, locale, setLocale, dir } = useTranslation();
+
   // Profiles state
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
@@ -360,44 +364,56 @@ export default function App() {
           </div>
           <div>
             <span className="text-lg font-extrabold tracking-tight text-slate-800 uppercase">Firefly Junior</span>
-            <span className="hidden sm:inline text-[10px] text-slate-400 font-bold tracking-widest uppercase ml-2 border-l pl-2 border-slate-200">Brokerage Panel</span>
+            <span className="hidden sm:inline text-[10px] text-slate-400 font-bold tracking-widest uppercase ml-2 border-l pl-2 border-slate-200" dir="ltr">{t('nav.brokeragePanel')}</span>
           </div>
         </div>
 
-        {selectedProfile ? (
-          <div className="flex items-center gap-6">
-            {/* Wallet Balance Capsule */}
-            <div className="hidden md:flex bg-slate-50 rounded-full px-4 py-1.5 items-center gap-2 border border-slate-200 shadow-inner">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                {selectedProfile.currencyMode === 'PARITY' ? 'BANK OF DAD' : 'LIVE FX SYNC'}
-              </span>
-              <span className="text-sm font-extrabold text-slate-800">
-                {summary ? `₪${summary.cashLocal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '₪0.00'}
-              </span>
-            </div>
-            
-            {/* Profile User block */}
-            <div className="flex items-center gap-3 border-l pl-6 border-slate-200">
-              <div className="text-right hidden sm:block">
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Broker Profile</p>
-                <p className="text-sm font-extrabold text-slate-800">{selectedProfile.name} (Age {profileAge})</p>
+        <div className="flex items-center gap-3">
+          {/* Language Switcher */}
+          <button
+            onClick={() => setLocale(locale === 'en' ? 'he' : 'en')}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs font-extrabold rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-800 transition-all cursor-pointer"
+            title={locale === 'en' ? 'עברית' : 'English'}
+          >
+            <Languages className="w-3.5 h-3.5" />
+            <span>{locale === 'en' ? 'HE' : 'EN'}</span>
+          </button>
+
+          {selectedProfile ? (
+            <div className="flex items-center gap-6">
+              {/* Wallet Balance Capsule */}
+              <div className="hidden md:flex bg-slate-50 rounded-full px-4 py-1.5 items-center gap-2 border border-slate-200 shadow-inner">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  {selectedProfile.currencyMode === 'PARITY' ? t('nav.bankOfDad') : t('nav.liveFxSync')}
+                </span>
+                <span className="text-sm font-extrabold text-slate-800">
+                  {summary ? `${t('common.ils')}${summary.cashLocal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${t('common.ils')}0.00`}
+                </span>
               </div>
-              <div className="w-10 h-10 bg-indigo-100 rounded-full border-2 border-indigo-200 flex items-center justify-center text-xl overflow-hidden shadow-sm">
-                {selectedProfile.avatar}
+
+              {/* Profile User block */}
+              <div className="flex items-center gap-3 border-l pl-6 border-slate-200">
+                <div className="text-right hidden sm:block">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase">{t('nav.brokerProfile')}</p>
+                  <p className="text-sm font-extrabold text-slate-800">{selectedProfile.name} ({t('dashboard.goodDay')} {profileAge})</p>
+                </div>
+                <div className="w-10 h-10 bg-indigo-100 rounded-full border-2 border-indigo-200 flex items-center justify-center text-xl overflow-hidden shadow-sm">
+                  {selectedProfile.avatar}
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-rose-500 hover:text-rose-600 font-extrabold text-xs ml-2 tracking-wider hover:underline transition-all cursor-pointer"
+                >
+                  {t('nav.logout')}
+                </button>
               </div>
-              <button
-                onClick={handleLogout}
-                className="text-rose-500 hover:text-rose-600 font-extrabold text-xs ml-2 tracking-wider hover:underline transition-all cursor-pointer"
-              >
-                LOGOUT
-              </button>
             </div>
-          </div>
-        ) : (
-          <div className="text-[10px] text-slate-400 font-extrabold bg-slate-100 px-3 py-1 rounded-full border border-slate-200 tracking-wider">
-            SECURED DOUBLE-ENTRY GATEWAY
-          </div>
-        )}
+          ) : (
+            <div className="text-[10px] text-slate-400 font-extrabold bg-slate-100 px-3 py-1 rounded-full border border-slate-200 tracking-wider">
+              {t('nav.securedGateway')}
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* Main Container */}
@@ -415,11 +431,11 @@ export default function App() {
             >
               <div className="text-center max-w-xl mx-auto space-y-4">
                 <span className="px-3 py-1.5 bg-orange-50 text-orange-600 font-extrabold text-[10px] rounded-full uppercase tracking-wider border border-orange-100 shadow-sm shadow-orange-50/50">
-                  Interactive Financial Sandbox
+                  {t('profileSelection.sandboxBadge')}
                 </span>
-                <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">Who is trading today?</h2>
+                <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">{t('profileSelection.whoIsTrading')}</h2>
                 <p className="text-sm font-medium text-slate-500 leading-relaxed max-w-md mx-auto">
-                  Firefly Junior Broker links your allowance piggy bank to live market prices. Grow your savings through real stakes safely managed by the Bank of Dad!
+                  {t('profileSelection.subtitle')}
                 </p>
               </div>
 
@@ -442,11 +458,11 @@ export default function App() {
                         {p.avatar}
                       </div>
                       <h3 className="text-lg font-extrabold text-slate-800">{p.name}</h3>
-                      <p className="text-xs font-semibold text-slate-400 mt-1">{age} years old</p>
+                      <p className="text-xs font-semibold text-slate-400 mt-1">{age} {t('profileSelection.yearsOld')}</p>
                       
                       <div className="mt-4 flex items-center gap-1.5 text-[10px] font-bold uppercase text-slate-600 bg-slate-50 hover:bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200/80 transition-all">
                         <Lock className="w-3 h-3 text-slate-400" />
-                        <span>ENTER PIN</span>
+                        <span>{t('profileSelection.enterPin')}</span>
                       </div>
                     </motion.div>
                   );
@@ -460,8 +476,8 @@ export default function App() {
                     className="cursor-pointer bg-slate-50 border border-dashed border-slate-300 hover:border-orange-400/60 hover:bg-white rounded-[32px] p-6 flex flex-col items-center justify-center text-center min-h-[220px] shadow-sm hover:shadow-lg hover:shadow-slate-100 transition-all group"
                   >
                     <PlusCircle className="w-12 h-12 text-slate-400 mb-2 group-hover:text-orange-500 transition-colors" />
-                    <h3 className="text-base font-bold text-slate-600 group-hover:text-slate-800 transition-colors">New Broker</h3>
-                    <p className="text-xs font-semibold text-slate-400 mt-1">Register a new kid account</p>
+                    <h3 className="text-base font-bold text-slate-600 group-hover:text-slate-800 transition-colors">{t('profileSelection.newBroker')}</h3>
+                    <p className="text-xs font-semibold text-slate-400 mt-1">{t('profileSelection.newBrokerDesc')}</p>
                   </motion.div>
                 )}
               </div>
@@ -476,7 +492,7 @@ export default function App() {
                   <div className="flex justify-between items-center mb-6">
                     <h3 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
                       <Users className="w-6 h-6 text-orange-500" />
-                      <span>Onboard New Kid Broker</span>
+                      <span>{t('createProfile.title')}</span>
                     </h3>
                     <button
                       onClick={() => setShowCreateProfile(false)}
@@ -489,18 +505,18 @@ export default function App() {
                   <form onSubmit={handleCreateProfileSubmit} className="space-y-4 text-sm font-medium">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Child Name</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.childName')}</label>
                         <input
                           type="text"
                           required
                           value={newProfileName}
                           onChange={(e) => setNewProfileName(e.target.value)}
-                          placeholder="e.g. Liam"
+                          placeholder={t('createProfile.childName')}
                           className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 outline-none transition-all font-semibold bg-slate-50/50 focus:bg-white"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Birth Year</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.birthYear')}</label>
                         <input
                           type="number"
                           required
@@ -515,7 +531,7 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">4-Digit Numeric PIN</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.pinLabel')}</label>
                         <input
                           type="text"
                           required
@@ -528,7 +544,7 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Choose Profile Avatar</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.avatarLabel')}</label>
                         <div className="flex gap-2 text-2xl bg-slate-50 p-2 rounded-xl border border-slate-200 justify-around">
                           {['🦊', '🐼', '🐯', '🦁', '🦉', '🐨', '🦄'].map((emoji) => (
                             <button
@@ -546,32 +562,32 @@ export default function App() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50/60 p-4 rounded-2xl border border-slate-200/60">
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Currency Conversion Mode</label>
+                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">{t('createProfile.currencyModeLabel')}</label>
                         <select
                           value={newProfileCurrency}
                           onChange={(e) => setNewProfileCurrency(e.target.value as any)}
                           className="w-full bg-white px-3 py-2 rounded-xl border border-slate-200 font-semibold cursor-pointer outline-none focus:border-indigo-500 transition-all"
                         >
-                          <option value="PARITY">PARITY: ₪1 allowance = $1 investment power</option>
-                          <option value="REAL">REAL: Converters ILS to USD at live market Moment</option>
+                          <option value="PARITY">{t('createProfile.parityOption')}</option>
+                          <option value="REAL">{t('createProfile.realOption')}</option>
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">Execution Mode</label>
+                        <label className="block text-xs font-bold uppercase text-slate-600 mb-1.5">{t('createProfile.executionModeLabel')}</label>
                         <select
                           value={newProfileExecution}
                           onChange={(e) => setNewProfileExecution(e.target.value as any)}
                           className="w-full bg-white px-3 py-2 rounded-xl border border-slate-200 font-semibold cursor-pointer outline-none focus:border-indigo-500 transition-all"
                         >
-                          <option value="INSTANT">INSTANT (Trade 24/7 immediately)</option>
-                          <option value="MARKET_BOUND">MARKET BOUND (Holds orders if closed)</option>
+                          <option value="INSTANT">{t('createProfile.instantOption')}</option>
+                          <option value="MARKET_BOUND">{t('createProfile.marketBoundOption')}</option>
                         </select>
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Firefly Savings Account ID</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.savingsAccountId')}</label>
                         <input
                           type="text"
                           required
@@ -581,7 +597,7 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">Firefly Investment Sub-Account ID</label>
+                        <label className="block text-xs font-bold uppercase text-slate-500 mb-1.5">{t('createProfile.investmentAccountId')}</label>
                         <input
                           type="text"
                           required
@@ -598,13 +614,13 @@ export default function App() {
                         onClick={() => setShowCreateProfile(false)}
                         className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-extrabold cursor-pointer transition-all"
                       >
-                        Cancel
+                        {t('createProfile.cancel')}
                       </button>
                       <button
                         type="submit"
                         className="px-6 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold rounded-xl shadow-md active:scale-95 cursor-pointer transition-all"
                       >
-                        ADD BROKER CODE!
+                        {t('createProfile.submit')}
                       </button>
                     </div>
                   </form>
@@ -630,14 +646,14 @@ export default function App() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h2 className="text-2xl font-extrabold text-slate-900">Good Day, {selectedProfile.name}!</h2>
+                      <h2 className="text-2xl font-extrabold text-slate-900">{t('dashboard.goodDay')}, {selectedProfile.name}!</h2>
                       <span className="bg-emerald-50 text-emerald-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-emerald-100 flex items-center gap-1.5 shadow-sm">
                         <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                        <span>Broker Active</span>
+                        <span>{t('dashboard.brokerActive')}</span>
                       </span>
                     </div>
                     <p className="text-xs font-semibold text-slate-500 mt-1">
-                      You are {profileAge} years old. Your ledger is syncing with parent savings #{selectedProfile.savingsAccountId}.
+                      {t('dashboard.ledgerSyncing')} #{selectedProfile.savingsAccountId}.
                     </p>
                   </div>
                 </div>
@@ -652,7 +668,7 @@ export default function App() {
                     className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold disabled:opacity-50 cursor-pointer"
                   >
                     <Activity className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                    <span>REFRESH LEDGER</span>
+                    <span>{t('dashboard.refreshLedger')}</span>
                   </button>
                   
                   {/* Nightly Snapshot Force Trigger (Educational Trigger) */}
@@ -672,7 +688,7 @@ export default function App() {
                     className="p-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-indigo-700 shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
                   >
                     <Coins className="w-4 h-4" />
-                    <span>FORCE DAILY SNAPSHOT</span>
+                    <span>{t('dashboard.forceDailySnapshot')}</span>
                   </button>
                 </div>
               </div>
@@ -680,10 +696,10 @@ export default function App() {
               {/* Navigation Tabs - Sleek Theme */}
               <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 max-w-lg">
                 {[
-                  { id: 'dashboard', label: 'My Vault', icon: PiggyBank },
-                  { id: 'stocks', label: 'Invest Market', icon: Coins },
-                  { id: 'ledger', label: 'Ledger History', icon: History },
-                  { id: 'settings', label: 'Settings', icon: User },
+                  { id: 'dashboard', label: t('dashboard.myVault'), icon: PiggyBank },
+                  { id: 'stocks', label: t('dashboard.investMarket'), icon: Coins },
+                  { id: 'ledger', label: t('dashboard.ledgerHistory'), icon: History },
+                  { id: 'settings', label: t('dashboard.settings'), icon: User },
                 ].map((tab) => {
                   const Icon = tab.icon;
                   return (
@@ -722,28 +738,28 @@ export default function App() {
                         <div className="absolute top-2 right-4 text-white opacity-10 text-8xl font-black select-none pointer-events-none">
                           ₪
                         </div>
-                        <h4 className="text-[10px] font-bold text-indigo-200 tracking-widest uppercase">Combined Wealth</h4>
+                        <h4 className="text-[10px] font-bold text-indigo-200 tracking-widest uppercase">{t('dashboard.combinedWealth')}</h4>
                         <div className="text-4xl font-extrabold mt-2 tracking-tight">
                           {selectedProfile.currencyMode === 'PARITY' ? '₪' : '₪'}
                           {summary.totalWealthLocal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         {selectedProfile.currencyMode === 'REAL' && (
                           <p className="text-[10px] text-indigo-200 font-extrabold uppercase mt-2">
-                            Equivalent to: ${summary.totalWealthUsd.toFixed(2)} USD (at ₪1 ILS = ${summary.fxRate.toFixed(2)} USD)
+                            {t('dashboard.equivalentTo')} ${summary.totalWealthUsd.toFixed(2)} USD (at ₪1 ILS = ${summary.fxRate.toFixed(2)} USD)
                           </p>
                         )}
                         
                         <div className="border-t border-indigo-400/30 mt-6 pt-4 grid grid-cols-2 gap-4">
                           <div>
-                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Liquid Cash</span>
+                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.liquidCash')}</span>
                             <p className="text-lg font-extrabold text-white mt-0.5">
-                              ₪{summary.cashLocal.toFixed(2)}
+                              {t('common.ils')}{summary.cashLocal.toFixed(2)}
                             </p>
                           </div>
                           <div>
-                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">Invested Stocks</span>
+                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.investedStocks')}</span>
                             <p className="text-lg font-extrabold text-white mt-0.5">
-                              ₪{summary.stockValueLocal.toFixed(2)}
+                              {t('common.ils')}{summary.stockValueLocal.toFixed(2)}
                             </p>
                           </div>
                         </div>
@@ -752,22 +768,21 @@ export default function App() {
                       {/* Cash Vault Sync detail - Sleek Card */}
                       <div className="bg-white rounded-[28px] p-6 border border-slate-200 shadow-sm space-y-4">
                         <div className="flex justify-between items-center">
-                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">Ledger Accounts</h4>
+                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('dashboard.ledgerAccounts')}</h4>
                           <span className="bg-emerald-50 text-emerald-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-emerald-100 shadow-sm">
-                            SYNCED
+                            {t('dashboard.synced')}
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                          Your money balance is held securely in the Bank of Dad's asset registry. 
-                          When you trade, Firefly moves real capital between accounts:
+                          {t('dashboard.syncedDesc')}
                         </p>
                         <div className="bg-slate-50 p-4 rounded-2xl space-y-2 border border-slate-200/60 text-xs">
                           <div className="flex justify-between font-bold text-slate-500">
-                            <span>Piggy Bank:</span>
+                            <span>{t('dashboard.piggyBank')}</span>
                             <span className="text-slate-800 font-extrabold font-mono text-[11px]">#{selectedProfile.savingsAccountId}</span>
                           </div>
                           <div className="flex justify-between font-bold text-slate-500">
-                            <span>Broker Storage:</span>
+                            <span>{t('dashboard.brokerStorage')}</span>
                             <span className="text-slate-800 font-extrabold font-mono text-[11px]">#{selectedProfile.investmentAccountId}</span>
                           </div>
                         </div>
@@ -780,11 +795,11 @@ export default function App() {
                       <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm">
                         <div className="flex justify-between items-center mb-6">
                           <div>
-                            <h3 className="text-xl font-extrabold text-slate-900">My Wealth Performance</h3>
-                            <p className="text-xs text-slate-500 font-semibold mt-0.5">Daily appraisal curve of your portfolio value</p>
+                            <h3 className="text-xl font-extrabold text-slate-900">{t('dashboard.myWealthPerformance')}</h3>
+                            <p className="text-xs text-slate-500 font-semibold mt-0.5">{t('dashboard.dailyAppraisal')}</p>
                           </div>
                           <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-full border border-indigo-100 shadow-sm">
-                            30-Day Growth
+                            {t('dashboard.dayGrowth')}
                           </span>
                         </div>
                         <PerformanceChart
@@ -806,7 +821,7 @@ export default function App() {
 
                       {/* Active Positions Table */}
                       <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm">
-                        <h3 className="text-xl font-extrabold text-slate-900 mb-6">My Investment Portfolio</h3>
+                        <h3 className="text-xl font-extrabold text-slate-900 mb-6">{t('dashboard.myInvestmentPortfolio')}</h3>
                         {holdings.length === 0 ? (
                           <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                             <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-2 animate-pulse" />
@@ -818,11 +833,11 @@ export default function App() {
                             <table className="w-full text-left text-sm font-semibold">
                               <thead>
                                 <tr className="border-b border-slate-100 text-[10px] text-slate-400 font-bold tracking-wider uppercase">
-                                  <th className="py-3 px-2">Stock</th>
-                                  <th className="py-3 px-2">Shares Owned</th>
-                                  <th className="py-3 px-2">Average Cost</th>
-                                  <th className="py-3 px-2">Current Value</th>
-                                  <th className="py-3 px-2">Gain / Loss</th>
+                                  <th className="py-3 px-2">{t('dashboard.stock')}</th>
+                                  <th className="py-3 px-2">{t('dashboard.sharesOwned')}</th>
+                                  <th className="py-3 px-2">{t('dashboard.averageCost')}</th>
+                                  <th className="py-3 px-2">{t('dashboard.currentValue')}</th>
+                                  <th className="py-3 px-2">{t('dashboard.gainLoss')}</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -832,11 +847,11 @@ export default function App() {
                                     <tr key={h.ticker} className="border-b border-slate-100/60 hover:bg-slate-50/40">
                                       <td className="py-4 px-2 flex items-center gap-3">
                                         <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-lg shadow-sm border border-slate-200/40">
-                                          {h.ticker === 'AAPL' ? '🍎' : h.ticker === 'DIS' ? '🏰' : h.ticker === 'RBLX' ? '🎮' : '⭐'}
+                                          {(stocks.find(s => s.ticker === h.ticker)?.logo) || '⭐'}
                                         </div>
                                         <div>
                                           <p className="font-extrabold text-slate-800">{h.ticker}</p>
-                                          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">Last bought {new Date(h.lastUpdated).toLocaleDateString()}</p>
+                                          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{t('dashboard.lastBought')} {new Date(h.lastUpdated).toLocaleDateString()}</p>
                                         </div>
                                       </td>
                                       <td className="py-4 px-2 font-extrabold text-slate-700">
@@ -886,8 +901,8 @@ export default function App() {
                     {/* Left Column: Stocks Directory */}
                     <div className="lg:col-span-1 bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm h-fit space-y-6">
                       <div>
-                        <h3 className="text-xl font-extrabold text-slate-900">Invest Marketplace</h3>
-                        <p className="text-xs text-slate-500 font-semibold mt-0.5">Select a kid-friendly company to inspect and trade!</p>
+                        <h3 className="text-xl font-extrabold text-slate-900">{t('stocks.marketplace')}</h3>
+                        <p className="text-xs text-slate-500 font-semibold mt-0.5">{t('stocks.marketplaceDesc')}</p>
                       </div>
 
                       <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
@@ -907,11 +922,11 @@ export default function App() {
                             >
                               <div className="flex items-center gap-3">
                                 <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-2xl shadow-sm border border-slate-100">
-                                  {s.ticker === 'AAPL' ? '🍎' : s.ticker === 'DIS' ? '🏰' : s.ticker === 'RBLX' ? '🎮' : s.ticker === 'TSLA' ? '⚡' : s.ticker === 'MSFT' ? '🟩' : s.ticker === 'NTDOY' ? '🍄' : s.ticker === 'GOOGL' ? '📺' : '🤖'}
+                                  {s.logo || '⭐'}
                                 </div>
                                 <div>
                                   <h4 className="font-extrabold text-slate-800 text-base">{s.ticker}</h4>
-                                  <p className="text-xs font-semibold text-slate-400">{s.name}</p>
+                                  <p className="text-xs font-semibold text-slate-400">{locale === 'he' && s.heName ? s.heName : s.name}</p>
                                 </div>
                               </div>
 
@@ -938,16 +953,16 @@ export default function App() {
                           <div className="flex justify-between items-start border-b border-slate-100/80 pb-4">
                             <div className="flex items-center gap-4">
                               <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-4xl shadow-sm border border-slate-200/60">
-                                {selectedStock.ticker === 'AAPL' ? '🍎' : selectedStock.ticker === 'DIS' ? '🏰' : selectedStock.ticker === 'RBLX' ? '🎮' : selectedStock.ticker === 'TSLA' ? '⚡' : selectedStock.ticker === 'MSFT' ? '🟩' : selectedStock.ticker === 'NTDOY' ? '🍄' : selectedStock.ticker === 'GOOGL' ? '📺' : '🤖'}
+                                {selectedStock.logo || '⭐'}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <h3 className="text-2xl font-extrabold text-slate-900">{selectedStock.name}</h3>
+                                  <h3 className="text-2xl font-extrabold text-slate-900">{locale === 'he' && selectedStock.heName ? selectedStock.heName : selectedStock.name}</h3>
                                   <span className="px-2 py-0.5 bg-slate-100 text-slate-600 font-extrabold text-xs rounded-full uppercase border border-slate-200/60">
                                     {selectedStock.ticker}
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-400 font-semibold mt-1">Live Appraisal from Alpaca API Sync</p>
+                                <p className="text-xs text-slate-400 font-semibold mt-1">{t('stocks.liveAppraisal')}</p>
                               </div>
                             </div>
 
@@ -967,10 +982,10 @@ export default function App() {
                             <div className="z-10">
                               <h4 className="font-extrabold text-emerald-900 text-sm flex items-center gap-1.5">
                                 <Sparkles className="w-5 h-5 text-emerald-500 animate-pulse" />
-                                <span>Learn about {selectedStock.ticker} with Coach Firefly!</span>
+                                <span>{t('stocks.learnAbout')} {selectedStock.ticker} {t('stocks.withCoach')}</span>
                               </h4>
                               <p className="text-xs font-semibold text-emerald-700 mt-1 max-w-md leading-relaxed">
-                                Curious what this company actually does? Coach Firefly translates stock market secrets using playground analogies!
+                                {t('stocks.coachDesc')}
                               </p>
                             </div>
                             <button
@@ -978,13 +993,13 @@ export default function App() {
                               className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md cursor-pointer transition-all active:scale-95 flex items-center gap-1.5 z-10"
                             >
                               <Sparkles className="w-4 h-4" />
-                              <span>ASK COACH FIREFLY (AI)</span>
+                              <span>{t('stocks.askCoach')}</span>
                             </button>
                           </div>
 
                           {/* Historical Stock Price Chart */}
                           <div className="space-y-3">
-                            <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">30-Day Valuation Chart</h4>
+                            <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">{t('stocks.dayValuationChart')}</h4>
                             <PerformanceChart
                               data={Array.from({ length: 30 }).map((_, idx) => {
                                 const d = new Date();
@@ -1005,10 +1020,10 @@ export default function App() {
                             <div className="bg-slate-50/50 border border-slate-200/80 rounded-[24px] p-6 space-y-4 shadow-sm">
                               <h4 className="font-extrabold text-emerald-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
                                 <Plus className="w-4.5 h-4.5" />
-                                <span>Invest (Buy Stocks)</span>
+                                <span>{t('stocks.investBuy')}</span>
                               </h4>
                               <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                Enter how many allowance shekels/dollars you want to invest. Minimum order size is exactly 10 units!
+                                {t('stocks.investBuyHint')}
                               </p>
 
                               <div className="space-y-4">
@@ -1043,7 +1058,7 @@ export default function App() {
                                   onClick={() => setShowPinPad('trade_buy')}
                                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
                                 >
-                                  CONFIRM BUY WITH PIN
+                                  {t('stocks.confirmBuy')}
                                 </button>
                               </div>
                             </div>
@@ -1052,10 +1067,10 @@ export default function App() {
                             <div className="bg-slate-50/50 border border-slate-200/80 rounded-[24px] p-6 space-y-4 shadow-sm">
                               <h4 className="font-extrabold text-rose-600 text-xs uppercase tracking-wider flex items-center gap-1.5">
                                 <Minus className="w-4.5 h-4.5" />
-                                <span>Liquidate (Sell Stocks)</span>
+                                <span>{t('stocks.liquidateSell')}</span>
                               </h4>
                               <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                Liquidate your shares to return savings capital back to your piggy bank. 
+                                {t('stocks.liquidateSellHint')}
                               </p>
 
                               <div className="space-y-4">
@@ -1070,7 +1085,7 @@ export default function App() {
                                           : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
                                       }`}
                                     >
-                                      {pct}% {pct === 100 ? 'ALL' : ''}
+                                      {pct}% {pct === 100 ? t('stocks.all') : ''}
                                     </button>
                                   ))}
                                 </div>
@@ -1079,7 +1094,7 @@ export default function App() {
                                   onClick={() => setShowPinPad('trade_sell')}
                                   className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
                                 >
-                                  CONFIRM SELL WITH PIN
+                                  {t('stocks.confirmSell')}
                                 </button>
                               </div>
                             </div>
@@ -1113,9 +1128,9 @@ export default function App() {
                       ) : (
                         <div className="bg-white rounded-[32px] p-12 border border-slate-200/80 shadow-sm text-center">
                           <Coins className="w-16 h-16 text-slate-300 mx-auto mb-4 animate-pulse" />
-                          <h3 className="text-xl font-extrabold text-slate-800">Select an Investment</h3>
+                          <h3 className="text-xl font-extrabold text-slate-800">{t('stocks.selectInvestment')}</h3>
                           <p className="text-xs font-semibold text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">
-                            Click on one of the companies on the left to learn how their stock functions, see live price charts, and execute mock trades!
+                            {t('stocks.selectInvestmentHint')}
                           </p>
                         </div>
                       )}
@@ -1137,29 +1152,28 @@ export default function App() {
                       <div className="absolute top-2 right-4 text-white opacity-10 text-8xl font-black select-none pointer-events-none">
                         🎓
                       </div>
-                      <h3 className="text-xl font-extrabold">Learn Double-Entry Accounting!</h3>
+                      <h3 className="text-xl font-extrabold">{t('ledger.learnDoubleEntry')}</h3>
                       <p className="text-xs font-semibold text-indigo-100 max-w-2xl mt-1.5 leading-relaxed">
-                        When grown-ups buy or sell assets, money never vanishes. It always travels in a structured double loop! 
-                        In our broker, liquidations are routed through the <strong>"Bank of Dad"</strong> Clearance Account:
+                        {t('ledger.doubleEntryDesc')}
                       </p>
-                      
+
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 backdrop-blur-sm shadow-sm">
-                          <span className="text-[9px] text-amber-200 font-bold uppercase bg-amber-500/30 px-2 py-0.5 rounded-md">Action A: Principal return</span>
+                          <span className="text-[9px] text-amber-200 font-bold uppercase bg-amber-500/30 px-2 py-0.5 rounded-md">{t('ledger.actionA')}</span>
                           <p className="text-xs font-semibold mt-2.5 text-indigo-50 leading-relaxed">
-                            Your original buying investment amount is sent safely from your Investment Account back to your Savings Account.
+                            {t('ledger.actionADesc')}
                           </p>
                         </div>
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 backdrop-blur-sm shadow-sm">
-                          <span className="text-[9px] text-emerald-200 font-bold uppercase bg-emerald-500/30 px-2 py-0.5 rounded-md">Action B: Profit reward</span>
+                          <span className="text-[9px] text-emerald-200 font-bold uppercase bg-emerald-500/30 px-2 py-0.5 rounded-md">{t('ledger.actionB')}</span>
                           <p className="text-xs font-semibold mt-2.5 text-indigo-50 leading-relaxed">
-                            If the stock went UP, the extra profit money is transferred directly from the <strong>Bank of Dad</strong> pool into your savings!
+                            {t('ledger.actionBDesc')}
                           </p>
                         </div>
                         <div className="bg-white/10 p-5 rounded-2xl border border-white/10 backdrop-blur-sm shadow-sm">
-                          <span className="text-[9px] text-rose-200 font-bold uppercase bg-rose-500/30 px-2 py-0.5 rounded-md">Action C: Loss adjustment</span>
+                          <span className="text-[9px] text-rose-200 font-bold uppercase bg-rose-500/30 px-2 py-0.5 rounded-md">{t('ledger.actionC')}</span>
                           <p className="text-xs font-semibold mt-2.5 text-indigo-50 leading-relaxed">
-                            If the stock went DOWN, the lost amount is transferred from your Investment Account back to Dad, returning less to your savings.
+                            {t('ledger.actionCDesc')}
                           </p>
                         </div>
                       </div>
@@ -1167,7 +1181,7 @@ export default function App() {
 
                     {/* Ledger Event History List */}
                     <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm">
-                      <h3 className="text-xl font-extrabold text-slate-900 mb-6">Firefly Ledger Events ({history.length})</h3>
+                      <h3 className="text-xl font-extrabold text-slate-900 mb-6">{t('ledger.fireflyLedgerEvents')} ({history.length})</h3>
                       {history.length === 0 ? (
                         <div className="text-center py-12 text-slate-400">
                           <History className="w-12 h-12 text-slate-300 mx-auto mb-2 animate-pulse" />
@@ -1193,19 +1207,19 @@ export default function App() {
                                   <div>
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="font-extrabold text-slate-800 text-base">
-                                        {isBuy ? 'Bought' : 'Sold'} {tx.shares.toFixed(4)} shares of {tx.ticker}
+                                        {isBuy ? t('ledger.bought') : t('ledger.sold')} {tx.shares.toFixed(4)} {t('ledger.shares')} {tx.ticker}
                                       </span>
                                       <span className={`text-[9px] font-bold uppercase px-2.5 py-1 rounded-full border ${
                                         isBuy ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 'bg-amber-50 text-amber-700 border-amber-100'
                                       }`}>
-                                        {isBuy ? 'Direct transfer' : 'Double-Entry Cleared'}
+                                        {isBuy ? t('ledger.directTransfer') : t('ledger.doubleEntryCleared')}
                                       </span>
                                     </div>
                                     <p className="text-xs text-slate-500 font-semibold mt-1">
-                                      Price: ${tx.priceUsd.toFixed(2)} USD | FX Conversion: {selectedProfile.currencyMode === 'PARITY' ? '₪1=1' : `₪1=$${tx.fxRate.toFixed(2)}`}
+                                      {t('ledger.price')} ${tx.priceUsd.toFixed(2)} USD | {t('ledger.fxConversion')} {selectedProfile.currencyMode === 'PARITY' ? '₪1=1' : `₪1=$${tx.fxRate.toFixed(2)}`}
                                     </p>
                                     <p className="text-[10px] text-slate-400 font-bold mt-1.5 uppercase">
-                                      Firefly III Hash: <span className="font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{tx.fireflyTransactionId}</span>
+                                      {t('ledger.fireflyHash')} <span className="font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{tx.fireflyTransactionId}</span>
                                     </p>
                                   </div>
                                 </div>
@@ -1240,17 +1254,17 @@ export default function App() {
                     <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm space-y-6">
                       <h3 className="text-xl font-extrabold text-slate-900 flex items-center gap-1.5">
                         <Users className="w-5 h-5 text-indigo-500" />
-                        <span>Profile Moderation</span>
+                        <span>{t('settings.profileModeration')}</span>
                       </h3>
                       <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                        Adjust settings for {selectedProfile.name}'s sandbox, or recreate clearance accounts safely.
+                        {t('settings.moderationDesc')}
                       </p>
 
                       <div className="space-y-4 pt-2 text-xs">
                         <div className="flex justify-between items-center bg-slate-50 border border-slate-200/40 p-4 rounded-2xl">
                           <div>
-                            <span className="font-extrabold text-slate-800">Ledger Currency Mode</span>
-                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">Set parity rules or active conversion rates</p>
+                            <span className="font-extrabold text-slate-800">{t('settings.ledgerCurrencyMode')}</span>
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{t('settings.currencyModeDesc')}</p>
                           </div>
                           <button
                             onClick={async () => {
@@ -1274,8 +1288,8 @@ export default function App() {
 
                         <div className="flex justify-between items-center bg-slate-50 border border-slate-200/40 p-4 rounded-2xl">
                           <div>
-                            <span className="font-extrabold text-slate-800">Execution Mode</span>
-                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">Holds orders pending market opening hours</p>
+                            <span className="font-extrabold text-slate-800">{t('settings.executionModeSetting')}</span>
+                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{t('settings.executionModeDesc')}</p>
                           </div>
                           <button
                             onClick={async () => {
@@ -1302,9 +1316,9 @@ export default function App() {
                           <div>
                             <span className="font-extrabold text-indigo-950 text-xs flex items-center gap-1.5">
                               <Coins className="w-4.5 h-4.5 text-indigo-500" />
-                              <span>Parent Deposit / Weekly Allowance</span>
+                              <span>{t('settings.parentDeposit')}</span>
                             </span>
-                            <p className="text-[10px] text-indigo-600/80 font-bold mt-0.5">Inject savings allowance safely to move the performance baseline without causing performance spikes.</p>
+                            <p className="text-[10px] text-indigo-600/80 font-bold mt-0.5">{t('settings.depositDesc')}</p>
                           </div>
                           <div className="flex gap-2">
                             <div className="relative flex-1">
@@ -1323,7 +1337,7 @@ export default function App() {
                               type="submit"
                               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] shadow-md hover:shadow-indigo-100 transition-all uppercase tracking-wider cursor-pointer"
                             >
-                              Deposit Allowance
+                              {t('settings.depositButton')}
                             </button>
                           </div>
                         </form>
@@ -1334,10 +1348,10 @@ export default function App() {
                     <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm space-y-6">
                       <h3 className="text-xl font-extrabold text-rose-600 flex items-center gap-1.5">
                         <ShieldAlert className="w-5 h-5" />
-                        <span>Security & Factory Reset</span>
+                        <span>{t('settings.securityReset')}</span>
                       </h3>
                       <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                        Irreversible actions. Deleting this profile deletes its cash history, snapshots, and stock allocations on the database file.
+                        {t('settings.securityDesc')}
                       </p>
 
                       <div className="pt-4 space-y-4">
@@ -1356,7 +1370,7 @@ export default function App() {
                           }}
                           className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
                         >
-                          CHANGE PIN PASSWORD
+                          {t('settings.changePin')}
                         </button>
 
                         <button
@@ -1364,7 +1378,7 @@ export default function App() {
                           className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 shadow-sm active:scale-95 transition-all cursor-pointer flex items-center justify-center gap-1.5 uppercase tracking-wider"
                         >
                           <Trash2 className="w-4 h-4" />
-                          <span>DELETE THIS PROFILE</span>
+                          <span>{t('settings.deleteProfile')}</span>
                         </button>
                       </div>
                     </div>
@@ -1385,15 +1399,15 @@ export default function App() {
           <PinPad
             title={
               showPinPad === 'login'
-                ? `Log In to ${targetProfileToLogin?.name || 'Vault'}`
+                ? `${t('pinPad.loginTitle')} ${targetProfileToLogin?.name || 'Vault'}`
                 : showPinPad === 'trade_buy'
-                ? `Authorize BUY Trade`
-                : `Authorize SELL Trade`
+                ? t('pinPad.buyTitle')
+                : t('pinPad.sellTitle')
             }
             subtitle={
               showPinPad === 'login'
-                ? 'Enter 4-digit PIN'
-                : `Authorizing: Trade transaction on ${selectedStock?.ticker}`
+                ? t('pinPad.enterPin')
+                : `${t('pinPad.authorizing')} ${selectedStock?.ticker}`
             }
             onVerify={handlePinPadVerify}
             onCancel={() => {

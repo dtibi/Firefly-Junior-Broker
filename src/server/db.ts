@@ -38,32 +38,32 @@ function initDb(): Schema {
     profiles: [
       {
         id: '1',
-        name: 'Leo',
+        name: 'נתנאל',
         birthYear: 2018, // 8 years old in 2026
         pinHash: hashPin('1234'), // default PIN
         currencyMode: 'PARITY', // ₪1 = $1 market power
         executionMode: 'INSTANT',
-        savingsAccountId: '101',
-        investmentAccountId: '201',
+        savingsAccountId: '6',
+        investmentAccountId: '26',
         avatar: '🦊',
         cumulativeDeposits: 500.0,
       },
       {
         id: '2',
-        name: 'Mia',
-        birthYear: 2013, // 13 years old in 2026
+        name: 'רוני',
+        birthYear: 2020, // 6 years old in 2026
         pinHash: hashPin('5678'), // default PIN
-        currencyMode: 'REAL', // Conversions using active FX rate
-        executionMode: 'MARKET_BOUND',
-        savingsAccountId: '102',
-        investmentAccountId: '202',
+        currencyMode: 'PARITY',
+        executionMode: 'INSTANT',
+        savingsAccountId: '9',
+        investmentAccountId: '27',
         avatar: '🐼',
-        cumulativeDeposits: 1000.0,
+        cumulativeDeposits: 500.0,
       },
     ],
     holdings: [
       {
-        profileName: 'Leo',
+        profileName: 'נתנאל',
         ticker: 'AAPL',
         shares: 0.5,
         averagePriceUsd: 180,
@@ -71,7 +71,7 @@ function initDb(): Schema {
         lastUpdated: new Date().toISOString(),
       },
       {
-        profileName: 'Leo',
+        profileName: 'נתנאל',
         ticker: 'DIS',
         shares: 1.2,
         averagePriceUsd: 100,
@@ -79,7 +79,7 @@ function initDb(): Schema {
         lastUpdated: new Date().toISOString(),
       },
       {
-        profileName: 'Mia',
+        profileName: 'רוני',
         ticker: 'RBLX',
         shares: 5.5,
         averagePriceUsd: 40,
@@ -90,7 +90,7 @@ function initDb(): Schema {
     transactions: [
       {
         id: 'tx-001',
-        profileName: 'Leo',
+        profileName: 'נתנאל',
         ticker: 'AAPL',
         type: 'BUY',
         shares: 0.5,
@@ -102,7 +102,7 @@ function initDb(): Schema {
       },
       {
         id: 'tx-002',
-        profileName: 'Leo',
+        profileName: 'נתנאל',
         ticker: 'DIS',
         type: 'BUY',
         shares: 1.2,
@@ -114,37 +114,37 @@ function initDb(): Schema {
       },
       {
         id: 'tx-003',
-        profileName: 'Mia',
+        profileName: 'רוני',
         ticker: 'RBLX',
         type: 'BUY',
         shares: 5.5,
         priceUsd: 40,
-        fxRate: 3.75, // Sample conversion ILS -> USD
-        fiatAmount: 825, // 220 USD * 3.75
+        fxRate: 1.0, // PARITY mode
+        fiatAmount: 220,
         fireflyTransactionId: 'ff-9003',
         timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
       },
     ],
     snapshots: [
-      // Leo's Snapshots
-      { date: '2026-07-14', profileName: 'Leo', totalValueUsd: 500, cashUsd: 300, stockValueUsd: 200, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
-      { date: '2026-07-15', profileName: 'Leo', totalValueUsd: 510, cashUsd: 300, stockValueUsd: 210, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 510 },
-      { date: '2026-07-16', profileName: 'Leo', totalValueUsd: 505, cashUsd: 300, stockValueUsd: 205, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 505 },
-      { date: '2026-07-17', profileName: 'Leo', totalValueUsd: 495, cashUsd: 290, stockValueUsd: 205, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 495 },
-      { date: '2026-07-18', profileName: 'Leo', totalValueUsd: 502, cashUsd: 290, stockValueUsd: 212, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 502 },
-      { date: '2026-07-19', profileName: 'Leo', totalValueUsd: 500, cashUsd: 290, stockValueUsd: 210, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
+      // נתנאל's Snapshots
+      { date: '2026-07-14', profileName: 'נתנאל', totalValueUsd: 500, cashUsd: 300, stockValueUsd: 200, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
+      { date: '2026-07-15', profileName: 'נתנאל', totalValueUsd: 510, cashUsd: 300, stockValueUsd: 210, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 510 },
+      { date: '2026-07-16', profileName: 'נתנאל', totalValueUsd: 505, cashUsd: 300, stockValueUsd: 205, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 505 },
+      { date: '2026-07-17', profileName: 'נתנאל', totalValueUsd: 495, cashUsd: 290, stockValueUsd: 205, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 495 },
+      { date: '2026-07-18', profileName: 'נתנאל', totalValueUsd: 502, cashUsd: 290, stockValueUsd: 212, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 502 },
+      { date: '2026-07-19', profileName: 'נתנאל', totalValueUsd: 500, cashUsd: 290, stockValueUsd: 210, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
 
-      // Mia's Snapshots
-      { date: '2026-07-14', profileName: 'Mia', totalValueUsd: 1000, cashUsd: 750, stockValueUsd: 250, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3750 },
-      { date: '2026-07-15', profileName: 'Mia', totalValueUsd: 1010, cashUsd: 750, stockValueUsd: 260, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3787.5 },
-      { date: '2026-07-16', profileName: 'Mia', totalValueUsd: 980, cashUsd: 740, stockValueUsd: 240, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3675 },
-      { date: '2026-07-17', profileName: 'Mia', totalValueUsd: 960, cashUsd: 740, stockValueUsd: 220, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3600 },
-      { date: '2026-07-18', profileName: 'Mia', totalValueUsd: 975, cashUsd: 750, stockValueUsd: 225, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3656.25 },
-      { date: '2026-07-19', profileName: 'Mia', totalValueUsd: 970, cashUsd: 750, stockValueUsd: 220, cumulativeDepositsUsd: 1000, cumulativeDepositsLocal: 3750, totalValueLocal: 3637.5 },
+      // רוני's Snapshots
+      { date: '2026-07-14', profileName: 'רוני', totalValueUsd: 500, cashUsd: 280, stockValueUsd: 220, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
+      { date: '2026-07-15', profileName: 'רוני', totalValueUsd: 510, cashUsd: 280, stockValueUsd: 230, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 510 },
+      { date: '2026-07-16', profileName: 'רוני', totalValueUsd: 500, cashUsd: 270, stockValueUsd: 230, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
+      { date: '2026-07-17', profileName: 'רוני', totalValueUsd: 490, cashUsd: 270, stockValueUsd: 220, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 490 },
+      { date: '2026-07-18', profileName: 'רוני', totalValueUsd: 505, cashUsd: 275, stockValueUsd: 230, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 505 },
+      { date: '2026-07-19', profileName: 'רוני', totalValueUsd: 500, cashUsd: 275, stockValueUsd: 225, cumulativeDepositsUsd: 500, cumulativeDepositsLocal: 500, totalValueLocal: 500 },
     ],
     cashBalances: {
-      Leo: 290.0, // Virtual liquid capital synced from Firefly / simulated (USD equivalent)
-      Mia: 750.0,
+      'נתנאל': 290.0, // Virtual liquid capital in savings (ILS)
+      'רוני': 275.0,
     },
     fxCache: null,
   };
@@ -163,7 +163,8 @@ function initDb(): Schema {
     if (parsed.profiles) {
       parsed.profiles.forEach((p: any) => {
         if (p.cumulativeDeposits === undefined) {
-          p.cumulativeDeposits = p.name.toLowerCase() === 'mia' ? 1000.0 : 500.0;
+          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
+          p.cumulativeDeposits = isRoniLike ? 1000.0 : 500.0;
           modified = true;
         }
       });
@@ -173,9 +174,9 @@ function initDb(): Schema {
     if (parsed.snapshots) {
       parsed.snapshots.forEach((s: any) => {
         if (s.cumulativeDepositsUsd === undefined) {
-          const isMia = s.profileName.toLowerCase() === 'mia';
-          const rate = isMia ? 3.75 : 1.0;
-          s.cumulativeDepositsUsd = isMia ? 1000.0 : 500.0;
+          const isRoniLike = s.profileName === 'רוני' || s.profileName.toLowerCase() === 'mia' || s.profileName.toLowerCase() === 'roni';
+          const rate = isRoniLike ? 1.0 : 1.0;
+          s.cumulativeDepositsUsd = isRoniLike ? 1000.0 : 500.0;
           s.cumulativeDepositsLocal = s.cumulativeDepositsUsd * rate;
           s.totalValueLocal = s.totalValueUsd * rate;
           modified = true;
@@ -303,11 +304,15 @@ export const Database = {
 
   // Cash Balance Synced/Virtual State
   getCashBalance(profileName: string): number {
-    if (dbCache.cashBalances[profileName] === undefined) {
-      dbCache.cashBalances[profileName] = 500.0;
-      saveDb();
-    }
-    return dbCache.cashBalances[profileName];
+    // Case-insensitive lookup to match getProfile behavior
+    const key = Object.keys(dbCache.cashBalances).find(
+      (k) => k.toLowerCase() === profileName.toLowerCase()
+    );
+    if (key) return dbCache.cashBalances[key];
+    // Lazy-init fallback
+    dbCache.cashBalances[profileName] = 500.0;
+    saveDb();
+    return 500.0;
   },
 
   updateCashBalance(profileName: string, newBalance: number) {

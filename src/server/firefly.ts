@@ -14,6 +14,35 @@ interface FireflyTxPayload {
 
 export const LedgerService = {
   /**
+   * Fetch live account balance from Firefly III
+   */
+  async getAccountBalance(accountId: string): Promise<number | null> {
+    const fireflyUrl = process.env.FIREFLY_INSTANCE_URL;
+    const fireflyToken = process.env.FIREFLY_PERSONAL_ACCESS_TOKEN;
+
+    if (!fireflyUrl || !fireflyToken) return null;
+
+    try {
+      const res = await fetch(`${fireflyUrl}/api/v1/accounts/${accountId}`, {
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${fireflyToken}`,
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const balance = parseFloat(data?.data?.attributes?.current_balance || '0');
+        return Number(balance.toFixed(2));
+      }
+    } catch (err) {
+      console.error(`[LedgerSync] Failed to fetch balance for account ${accountId}:`, err);
+    }
+
+    return null;
+  },
+
+  /**
    * Generates a Firefly III compatible transaction on the ledger
    */
   async createTransfer(
@@ -69,9 +98,13 @@ export const LedgerService = {
       }
     }
 
-    // High fidelity simulator fallback
+    // High fidelity simulator fallback — only used when Firefly is unreachable
     const mockId = `ff-sim-${Math.floor(100000 + Math.random() * 900000)}`;
-    console.log(`[LedgerSync] [MOCK] Logged ledger transfer of ₪/$$ ${amount.toFixed(2)} to Firefly III. Mock ID: ${mockId}`);
+    if (fireflyUrl && fireflyToken) {
+      console.warn(`[LedgerSync] WARNING: Real Firefly III is configured but API call failed. Using MOCK transfer ${mockId}. Ledger WILL be out of sync!`);
+    } else {
+      console.log(`[LedgerSync] [MOCK] Logged ledger transfer of ₪/$$ ${amount.toFixed(2)} to Firefly III. Mock ID: ${mockId}`);
+    }
     return mockId;
   },
 
@@ -131,9 +164,13 @@ export const LedgerService = {
 
     const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '99';
 
-    // Action A: Create a Firefly transfer returning the exact original Principal Capital out of the child's investment sub-account back to savings
+    // Action A: Return sale proceeds from investment account back to savings.
+    // For gains: return the original principal (profit comes from Dad in Action B).
+    // For losses: return only the current value (the difference is the loss sent to Dad in Action C).
+    // This keeps the investment account balance at net zero after both actions.
+    const returnAmount = isGain ? principalFiat : currentTotalFiat;
     const principalTransferId = await this.createTransfer(
-      principalFiat,
+      returnAmount,
       `Liquidation Principal Return: Sell ${shares.toFixed(4)} shares of ${ticker}`,
       investmentAccountId,
       savingsAccountId
@@ -141,24 +178,26 @@ export const LedgerService = {
 
     let adjustmentTransferId = '';
 
-    if (isGain) {
-      // Action B (If Gain): Transfer profit from Bank of Dad account into the child's savings account
-      adjustmentTransferId = await this.createTransfer(
-        deltaFiat,
-        `Liquidation Investment Profit (Bank of Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
-        dadAccountId,
-        savingsAccountId
-      );
-    } else {
-      // Action C (If Loss): Transfer the lost amount from the child's investment sub-account directly to the Bank of Dad
-      // This reduces what was effectively refunded (Principal was returned to Savings, but the loss is immediately paid to Dad from Investment)
-      // Wait, let's check: "Transfer the lost amount from child's investment_account_id directly to BANK_OF_DAD_ACCOUNT_ID"
-      adjustmentTransferId = await this.createTransfer(
-        deltaFiat,
-        `Liquidation Loss Adjustment (Paid to Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
-        investmentAccountId,
-        dadAccountId
-      );
+    // Only create an adjustment transfer if the gain/loss rounds to at least 0.01
+    // (Firefly III rejects zero-amount transfers)
+    if (Number(deltaFiat.toFixed(2)) > 0) {
+      if (isGain) {
+        // Action B (If Gain): Transfer profit from Bank of Dad account into the child's savings account
+        adjustmentTransferId = await this.createTransfer(
+          deltaFiat,
+          `Liquidation Investment Profit (Bank of Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
+          dadAccountId,
+          savingsAccountId
+        );
+      } else {
+        // Action C (If Loss): Transfer the lost amount from the child's investment sub-account directly to the Bank of Dad
+        adjustmentTransferId = await this.createTransfer(
+          deltaFiat,
+          `Liquidation Loss Adjustment (Paid to Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
+          investmentAccountId,
+          dadAccountId
+        );
+      }
     }
 
     return {

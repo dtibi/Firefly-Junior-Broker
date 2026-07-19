@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import 'dotenv/config';
 import express from 'express';
 import * as path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -129,8 +130,11 @@ async function startServer() {
       }
 
       const holdings = Database.getHoldings(profileName);
-      const cashUsd = Database.getCashBalance(profileName);
       const fxRate = await MarketService.getILSExchangeRate();
+
+      // Fetch live balance from Firefly III savings account (fall back to local cache)
+      const liveBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
+      const rawCashBalance = liveBalance ?? Database.getCashBalance(profileName);
 
       // Fetch active pricing for all holdings
       let totalStockValueUsd = 0;
@@ -149,7 +153,7 @@ async function startServer() {
               currentValueUsd: Number(currentValueUsd.toFixed(2)),
               gainLossUsd: Number((currentValueUsd - originalValueUsd).toFixed(2)),
               gainLossPercent: Number(gainLossPercent.toFixed(2)),
-              logo: quote.ticker,
+              logo: quote.logo || '⭐',
             };
           } catch (e) {
             return {
@@ -158,32 +162,15 @@ async function startServer() {
               currentValueUsd: h.shares * h.averagePriceUsd,
               gainLossUsd: 0,
               gainLossPercent: 0,
-              logo: h.ticker,
+              logo: '⭐',
             };
           }
         })
       );
 
-      const totalValueUsd = cashUsd + totalStockValueUsd;
-
-      // Adjust cash and totals back to local currency depending on PARITY or REAL mode
-      // If PARITY, 1 Shekel = 1 USD. Values are directly shekels.
-      // If REAL, we convert savings accounts (ILS) to USD when syncing. We track virtual cash balance in the child's local currency.
-      // Wait, let's treat the virtual savings balance as Child's home allowance currency (ILS).
-      // So fiatCash = cashUsd. (We assume db stores cash in Shekels/fiat).
-      // Let's do that cleanly: the cash in database is the child's raw savings balance (e.g., ₪290).
-      // In REAL mode:
-      // - USD cash buying power = raw shekels * fxRate (e.g. 290 * 0.27 = $78.30 USD).
-      // - Stock holdings are purchased in USD, so stockValueUsd = totalStockValueUsd.
-      // - To show total combined wealth in child shekels: total wealth shekels = raw shekels + (stockValueUsd / fxRate).
-      // In PARITY mode:
-      // - USD cash buying power = raw shekels.
-      // - Stock holdings value in shekels = stockValueUsd.
-      // - Total combined wealth shekels = raw shekels + stockValueUsd.
-      
-      const rawCashBalance = cashUsd; // cached in database as raw local currency
+      // Live Firefly III balance (rawCashBalance) is in local ILS currency.
+      // Compute USD-equivalent and total wealth based on currency mode.
       const fxFactor = profile.currencyMode === 'PARITY' ? 1.0 : fxRate;
-      
       const cashValueUsd = profile.currencyMode === 'PARITY' ? rawCashBalance : (rawCashBalance * fxFactor);
       const portfolioTotalUsd = cashValueUsd + totalStockValueUsd;
       const portfolioTotalLocal = profile.currencyMode === 'PARITY' ? portfolioTotalUsd : (portfolioTotalUsd / fxFactor);
@@ -253,7 +240,9 @@ async function startServer() {
       const currentYear = new Date().getFullYear();
       const age = currentYear - profile.birthYear;
 
-      const guide = await AIService.getAgeAwareStockTutorial(profile.name, age, ticker);
+      const locale = Array.isArray(req.query.locale) ? (req.query.locale[0] as string) : (req.query.locale as string || 'en');
+
+      const guide = await AIService.getAgeAwareStockTutorial(profile.name, age, ticker, locale);
       res.json({ success: true, guide });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -297,8 +286,9 @@ async function startServer() {
           });
         }
 
-        // Check cash balance
-        const currentCashLocal = Database.getCashBalance(profileName);
+        // Check cash balance from live Firefly III (fall back to local cache)
+        const liveBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
+        const currentCashLocal = liveBalance ?? Database.getCashBalance(profileName);
         if (currentCashLocal < investFiat) {
           return res.status(400).json({
             success: false,
@@ -368,7 +358,7 @@ async function startServer() {
           fireflyTransactionId: ffTxId,
         });
 
-        // Deduct from savings balance
+        // Keep local cache in sync with Firefly III for fallback resilience
         Database.updateCashBalance(profileName, currentCashLocal - investFiat);
 
         return res.json({
@@ -409,12 +399,14 @@ async function startServer() {
           fxRate: fxFactor,
         });
 
-        // Update cash balance
-        const currentCashLocal = Database.getCashBalance(profileName);
+        // Keep local cache in sync with Firefly III for fallback resilience
+        const sellBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
+        if (sellBalance !== null) {
+          Database.updateCashBalance(profileName, sellBalance);
+        }
+
         const totalLiquidationUsd = sharesToSell * quote.priceUsd;
         const totalLiquidationLocal = profile.currencyMode === 'PARITY' ? totalLiquidationUsd : (totalLiquidationUsd / fxFactor);
-        
-        Database.updateCashBalance(profileName, currentCashLocal + totalLiquidationLocal);
 
         // Update holding
         currentHolding.shares = Number((currentHolding.shares - sharesToSell).toFixed(4));
@@ -434,13 +426,16 @@ async function startServer() {
           fireflyTransactionId: clearance.principalTransferId,
         });
 
+        const deltaRounded = Number(clearance.deltaValue.toFixed(2));
+        const gainMsg = deltaRounded > 0
+          ? clearance.isGain
+            ? `You earned ₪/$$ ${clearance.deltaValue.toFixed(2)} in profit from the Bank of Dad! 🎁`
+            : `Your losses of ₪/$$ ${clearance.deltaValue.toFixed(2)} were adjusted through Dad's clearance.`
+          : `You broke even — no profit or loss on this trade! Principal returned to savings. 📊`;
+
         return res.json({
           success: true,
-          message: `Awesome! You sold ${sharesToSell.toFixed(4)} shares of ${ticker} for a total return of ₪/$$ ${totalLiquidationLocal.toFixed(2)}! ${
-            clearance.isGain
-              ? `You earned ₪/$$ ${clearance.deltaValue.toFixed(2)} in profit from the Bank of Dad! 🎁`
-              : `Your losses of ₪/$$ ${clearance.deltaValue.toFixed(2)} were adjusted through Dad's clearance.`
-          }`,
+          message: `Awesome! You sold ${sharesToSell.toFixed(4)} shares of ${ticker} for a total return of ₪/$$ ${totalLiquidationLocal.toFixed(2)}! ${gainMsg}`,
           transaction: tx,
         });
       }
@@ -467,28 +462,40 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'Profile not found.' });
       }
 
-      // Add to cash local balance
-      const currentCashLocal = Database.getCashBalance(name);
-      const newCashLocal = currentCashLocal + Number(amount);
-      Database.updateCashBalance(name, newCashLocal);
+      // Create real Firefly III deposit: Bank of Dad → child's savings account
+      const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '99';
+      const depositId = await LedgerService.createTransfer(
+        Number(amount),
+        `Weekly allowance deposit for ${name}`,
+        dadAccountId,
+        profile.savingsAccountId
+      );
 
-      // Increment cumulative deposits
+      // Read live balance from Firefly after the deposit cleared
+      const newCashLocal = await LedgerService.getAccountBalance(profile.savingsAccountId);
+
+      // Keep local cache in sync with Firefly for fallback resilience
+      if (newCashLocal !== null) {
+        Database.updateCashBalance(name, newCashLocal);
+      }
+
+      // Increment cumulative deposits (app-level concept, tracked locally)
       const currentCumulative = profile.cumulativeDeposits || 500.0;
       const newCumulative = currentCumulative + Number(amount);
       const updatedProfile = Database.updateProfile(name, {
         cumulativeDeposits: newCumulative,
       });
 
-      // Log transaction ledger event so the kid sees the allowance deposit
+      // Log transaction with real Firefly III ID
       Database.logTransaction({
         profileName: name,
         ticker: 'CASH_DEP',
-        type: 'BUY', // Treated as BUY for visual log consistency
+        type: 'BUY',
         shares: 0.0,
         priceUsd: 1.0,
         fxRate: 1.0,
         fiatAmount: Number(amount),
-        fireflyTransactionId: `dep-${Date.now()}`,
+        fireflyTransactionId: depositId,
       });
 
       // Immediately write/update snapshot for today so charts refresh instantly
@@ -507,10 +514,11 @@ async function startServer() {
           }
         }
 
+        const liveBalance = newCashLocal ?? Database.getCashBalance(name);
         const fxFactor = profile.currencyMode === 'PARITY' ? 1.0 : fxRate;
-        const cashUsd = profile.currencyMode === 'PARITY' ? newCashLocal : (newCashLocal * fxFactor);
+        const cashUsd = profile.currencyMode === 'PARITY' ? liveBalance : (liveBalance * fxFactor);
         const totalValueUsd = cashUsd + totalStockValueUsd;
-        
+
         const cumulativeDepositsUsd = profile.currencyMode === 'PARITY' ? newCumulative : (newCumulative * fxFactor);
 
         Database.addSnapshot({
@@ -531,7 +539,7 @@ async function startServer() {
         success: true,
         message: `Success! Deposited ₪/$$ ${amount} weekly allowance into ${name}'s piggy bank clearance!`,
         profile: updatedProfile,
-        cashLocal: newCashLocal,
+        cashLocal: newCashLocal ?? Database.getCashBalance(name),
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -546,7 +554,8 @@ async function startServer() {
       const fxRate = await MarketService.getILSExchangeRate();
 
       for (const p of profiles) {
-        const cashLocal = Database.getCashBalance(p.name);
+        const liveBalance = await LedgerService.getAccountBalance(p.savingsAccountId);
+        const cashLocal = liveBalance ?? Database.getCashBalance(p.name);
         const holdings = Database.getHoldings(p.name);
 
         let totalStockValueUsd = 0;
