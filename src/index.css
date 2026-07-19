@@ -5,3 +5,26 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
+
+/* RTL support for Hebrew */
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir="rtl"] .ltr-only {
+  direction: ltr;
+  display: inline-block;
+}
+
+/* Mirror spacing utilities for RTL */
+[dir="rtl"] .space-x-4 > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-x-reverse: 1;
+}
+
+/* Ensure numbers and currency stay LTR */
+[dir="rtl"] .ltr,
+[dir="rtl"] [data-ltr] {
+  direction: ltr;
+  display: inline-block;
+}

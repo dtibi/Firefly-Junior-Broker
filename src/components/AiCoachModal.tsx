@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Sparkles, X, Volume2, BookOpen, Star, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface AiCoachModalProps {
   ticker: string;
@@ -20,6 +21,7 @@ export default function AiCoachModal({
   profileName,
   onClose,
 }: AiCoachModalProps) {
+  const { t, locale } = useTranslation();
   const [guideText, setGuideText] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +31,7 @@ export default function AiCoachModal({
       try {
         setIsLoading(true);
         setError(null);
-        const res = await fetch(`/api/stocks/${ticker}/ai-guide?profileName=${encodeURIComponent(profileName)}`);
+        const res = await fetch(`/api/stocks/${ticker}/ai-guide?profileName=${encodeURIComponent(profileName)}&locale=${locale}`);
         const data = await res.json();
         if (data.success) {
           setGuideText(data.guide);
@@ -82,8 +84,8 @@ export default function AiCoachModal({
               <Sparkles className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="text-xl font-black text-slate-800">Learn with Coach Firefly 🧚‍♀️</h3>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Active Guide: {stockName} ({ticker})</p>
+              <h3 className="text-xl font-black text-slate-800">{t('aiCoach.learnWith')} 🧚‍♀️</h3>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('aiCoach.activeGuide')} {stockName} ({ticker})</p>
             </div>
           </div>
           <button
@@ -100,9 +102,9 @@ export default function AiCoachModal({
             🧚‍♀️
           </div>
           <div className="flex-1">
-            <h4 className="font-extrabold text-emerald-800 text-sm">"Let's play the Market Game!"</h4>
+            <h4 className="font-extrabold text-emerald-800 text-sm">{t('aiCoach.letsPlay')}</h4>
             <p className="text-xs text-emerald-600 leading-tight mt-1 font-semibold">
-              I'm translating real grown-up stock secrets into fun playground maps just for you, {profileName}!
+              {t('aiCoach.translating')} {profileName}!
             </p>
           </div>
         </div>
@@ -117,7 +119,7 @@ export default function AiCoachModal({
                 <span className="w-3 h-3 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
               </div>
               <p className="text-xs font-black text-slate-500 uppercase tracking-widest animate-pulse">
-                Consulting fairy scrolls...
+                {t('aiCoach.consulting')}
               </p>
             </div>
           ) : error ? (
@@ -144,7 +146,7 @@ export default function AiCoachModal({
               className="flex items-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-extrabold text-xs rounded-xl transition-all cursor-pointer shadow-sm"
             >
               <Volume2 className="w-4 h-4 animate-pulse" />
-              <span>READ ALOUD TO ME</span>
+              <span>{t('aiCoach.readAloud')}</span>
             </button>
           ) : (
             <div />
@@ -154,7 +156,7 @@ export default function AiCoachModal({
             onClick={onClose}
             className="px-6 py-2.5 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all cursor-pointer border-b-4 border-emerald-600 active:scale-95"
           >
-            I UNDERSTAND!
+            {t('aiCoach.iUnderstand')}
           </button>
         </div>
       </motion.div>

@@ -29,7 +29,8 @@ export const AIService = {
   async getAgeAwareStockTutorial(
     profileName: string,
     age: number,
-    ticker: string
+    ticker: string,
+    locale: string = 'en'
   ): Promise<string> {
     const stock = KIDS_STOCKS[ticker];
     if (!stock) {
@@ -55,11 +56,12 @@ export const AIService = {
           model: 'gemini-3.5-flash',
           contents: prompt,
           config: {
-            systemInstruction: `You are a supportive, warm, and highly engaging financial tutor for children. 
+            systemInstruction: `You are a supportive, warm, and highly engaging financial tutor for children.
 The active user is named ${profileName}, and they are exactly ${age} years old.
+${locale === 'he' ? 'IMPORTANT: You MUST respond entirely in Hebrew (עברית). Use child-friendly Hebrew vocabulary suitable for a ' + age + '-year-old Israeli child. Write from right to left naturally. Do NOT use English at all.' : 'Respond in English.'}
 Explain the financial metrics, risk behaviors, or characteristics of the stock ticker ${ticker} using analogies, mental models, and vocabulary exactly mapped to a child of this age.
 Keep paragraphs short (under 3 sentences per concept), avoid dry corporate jargon, and maximize visual analogies (like playground swings, piggy banks, candy stores, lego blocks).
-Always sign off as "Coach Firefly 🧚‍♀️".`,
+Always sign off as "Coach Firefly 🧚‍♀️"${locale === 'he' ? ' (in Hebrew: המאמנת פיירפליי 🧚‍♀️)' : ''}.`,
           },
         });
 

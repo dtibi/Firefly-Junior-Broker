@@ -5,6 +5,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface ChartDataPoint {
   date: string;
@@ -25,6 +26,7 @@ export default function PerformanceChart({
   height = 200,
   currencySymbol = '₪',
 }: PerformanceChartProps) {
+  const { t } = useTranslation();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const points = useMemo(() => {
@@ -145,7 +147,7 @@ export default function PerformanceChart({
   if (points.length === 0) {
     return (
       <div className="flex items-center justify-center bg-slate-50 border border-dashed border-slate-200 rounded-2xl h-44 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-        No Snapshot Curve Available Yet
+        {t('dashboard.noSnapshotCurve')}
       </div>
     );
   }
@@ -168,13 +170,13 @@ export default function PerformanceChart({
         <div className="flex flex-wrap justify-between items-end gap-3 pb-2 border-b border-slate-100">
           <div className="flex items-center gap-4">
             <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Value</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.totalValue')}</span>
               <p className="text-xl font-extrabold text-slate-900 mt-0.5">
                 {currencySymbol}{latestPoint.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="border-l border-slate-200 pl-4">
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Savings Put In</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.totalSavingsPutIn')}</span>
               <p className="text-xl font-extrabold text-slate-700 mt-0.5">
                 {currencySymbol}{(latestPoint.cumulativeDeposits ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
@@ -182,7 +184,7 @@ export default function PerformanceChart({
           </div>
 
           <div className="text-right">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Market Gains / Returns</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.marketGainsReturns')}</span>
             <div className="flex items-center gap-1.5 mt-0.5 justify-end">
               <span className={`text-base font-extrabold ${isReturnPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
                 {isReturnPositive ? '+' : ''}{currencySymbol}{totalReturn.toFixed(2)}
@@ -311,15 +313,15 @@ export default function PerformanceChart({
                   {new Date(c.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-400 font-semibold">Total Wealth:</span>
+                  <span className="text-slate-400 font-semibold">{t('chart.totalWealth')}:</span>
                   <span className="font-extrabold text-white">{currencySymbol}{c.price.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <span className="text-slate-400 font-semibold">My Savings:</span>
+                  <span className="text-slate-400 font-semibold">{t('chart.mySavings')}:</span>
                   <span className="font-extrabold text-slate-300">{currencySymbol}{depVal.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between gap-4 border-t border-slate-800 pt-1.5">
-                  <span className="text-slate-400 font-semibold">Market Return:</span>
+                  <span className="text-slate-400 font-semibold">{t('chart.marketReturn')}:</span>
                   <span className={`font-black ${pos ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {pos ? '+' : ''}{currencySymbol}{gain.toFixed(2)} ({pos ? '▲' : '▼'}{pct.toFixed(1)}%)
                   </span>
@@ -333,7 +335,7 @@ export default function PerformanceChart({
                   {new Date(c.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                 </p>
                 <div className="flex justify-between gap-4 mt-1.5">
-                  <span className="text-slate-400 font-semibold">Stock Price:</span>
+                  <span className="text-slate-400 font-semibold">{t('chart.stockPrice')}:</span>
                   <span className="font-extrabold text-emerald-400">${c.price.toFixed(2)} USD</span>
                 </div>
               </div>
@@ -347,11 +349,11 @@ export default function PerformanceChart({
         <div className="flex gap-4 justify-center text-[10px] text-slate-500 font-semibold">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-indigo-500 rounded-full" />
-            <span>Total Wealth Growth Curve</span>
+            <span>{t('chart.totalWealthGrowth')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 border-t-2 border-dashed border-slate-400" />
-            <span>Net Savings Deposited (Allowance baseline)</span>
+            <span>{t('chart.netSavingsDeposited')}</span>
           </div>
         </div>
       )}
