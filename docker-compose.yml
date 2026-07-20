@@ -1,0 +1,15 @@
+version: "3.8"
+
+services:
+  broker:
+    build: .
+    container_name: firefly-broker
+    restart: always
+    ports:
+      - "3000:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
