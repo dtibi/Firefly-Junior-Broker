@@ -219,6 +219,17 @@ export const MarketService = {
               prevClose = quotes?.close?.[0] || basePrice;
               volume = quotes?.volume?.[0] || 0;
             }
+
+            // If Alpaca didn't return a live price but Yahoo has data,
+            // use the latest close from Yahoo as the current price
+            if (price === basePrice && quotes && timestamps && timestamps.length > 0) {
+              const latestIdx = timestamps.length - 1;
+              const latestClose = quotes.close?.[latestIdx];
+              if (latestClose) {
+                price = latestClose;
+                dataTimestamp = new Date(timestamps[latestIdx] * 1000).toISOString();
+              }
+            }
           }
         }
 

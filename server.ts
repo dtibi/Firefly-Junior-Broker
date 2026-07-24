@@ -447,104 +447,8 @@ async function startServer() {
     }
   });
 
-  // 10b. Parent Allowance / Capital Deposit
-  app.post('/api/profiles/:name/deposit', async (req, res) => {
-    try {
-      const { name } = req.params;
-      const { amount } = req.body; // in child's local currency (fiat)
-
-      if (amount === undefined || isNaN(Number(amount)) || Number(amount) <= 0) {
-        return res.status(400).json({ success: false, error: 'Deposit amount must be a positive number!' });
-      }
-
-      const profile = Database.getProfile(name);
-      if (!profile) {
-        return res.status(404).json({ success: false, error: 'Profile not found.' });
-      }
-
-      // Create real Firefly III deposit: Bank of Dad → child's savings account
-      const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '99';
-      const depositId = await LedgerService.createTransfer(
-        Number(amount),
-        `Weekly allowance deposit for ${name}`,
-        dadAccountId,
-        profile.savingsAccountId
-      );
-
-      // Read live balance from Firefly after the deposit cleared
-      const newCashLocal = await LedgerService.getAccountBalance(profile.savingsAccountId);
-
-      // Keep local cache in sync with Firefly for fallback resilience
-      if (newCashLocal !== null) {
-        Database.updateCashBalance(name, newCashLocal);
-      }
-
-      // Increment cumulative deposits (app-level concept, tracked locally)
-      const currentCumulative = profile.cumulativeDeposits || 500.0;
-      const newCumulative = currentCumulative + Number(amount);
-      const updatedProfile = Database.updateProfile(name, {
-        cumulativeDeposits: newCumulative,
-      });
-
-      // Log transaction with real Firefly III ID
-      Database.logTransaction({
-        profileName: name,
-        ticker: 'CASH_DEP',
-        type: 'BUY',
-        shares: 0.0,
-        priceUsd: 1.0,
-        fxRate: 1.0,
-        fiatAmount: Number(amount),
-        fireflyTransactionId: depositId,
-      });
-
-      // Immediately write/update snapshot for today so charts refresh instantly
-      try {
-        const dateStr = new Date().toISOString().split('T')[0];
-        const holdings = Database.getHoldings(name);
-        const fxRate = await MarketService.getILSExchangeRate();
-
-        let totalStockValueUsd = 0;
-        for (const h of holdings) {
-          try {
-            const q = await MarketService.getStockQuote(h.ticker);
-            totalStockValueUsd += h.shares * q.priceUsd;
-          } catch (e) {
-            totalStockValueUsd += h.shares * h.averagePriceUsd;
-          }
-        }
-
-        const liveBalance = newCashLocal ?? Database.getCashBalance(name);
-        const fxFactor = profile.currencyMode === 'PARITY' ? 1.0 : fxRate;
-        const cashUsd = profile.currencyMode === 'PARITY' ? liveBalance : (liveBalance * fxFactor);
-        const totalValueUsd = cashUsd + totalStockValueUsd;
-
-        const cumulativeDepositsUsd = profile.currencyMode === 'PARITY' ? newCumulative : (newCumulative * fxFactor);
-
-        Database.addSnapshot({
-          date: dateStr,
-          profileName: name,
-          totalValueUsd: Number(totalValueUsd.toFixed(2)),
-          cashUsd: Number(cashUsd.toFixed(2)),
-          stockValueUsd: Number(totalStockValueUsd.toFixed(2)),
-          cumulativeDepositsUsd: Number(cumulativeDepositsUsd.toFixed(2)),
-          cumulativeDepositsLocal: Number(newCumulative.toFixed(2)),
-          totalValueLocal: profile.currencyMode === 'PARITY' ? Number(totalValueUsd.toFixed(2)) : Number((totalValueUsd / fxFactor).toFixed(2)),
-        });
-      } catch (errSnap) {
-        console.error('Error writing immediate snapshot during deposit:', errSnap);
-      }
-
-      res.json({
-        success: true,
-        message: `Success! Deposited ₪/$$ ${amount} weekly allowance into ${name}'s piggy bank clearance!`,
-        profile: updatedProfile,
-        cashLocal: newCashLocal ?? Database.getCashBalance(name),
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
+  // 10b. Allowance deposits are managed directly in Firefly III.
+  // The app reads live balances from Firefly, so any deposit made there is instantly reflected.
 
   // 11. Force Valuation snapshots worker (Nightly / Daily schedule trigger)
   app.post('/api/cron/snapshots', async (req, res) => {
@@ -601,6 +505,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    // Serve public assets (PWA manifest, icons)
+    const publicPath = path.join(process.cwd(), 'public');
+    app.use(express.static(publicPath));
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {

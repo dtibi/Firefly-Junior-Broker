@@ -75,8 +75,7 @@ export default function App() {
   const [newProfileInvestmentId, setNewProfileInvestmentId] = useState<string>('201');
   const [newProfileAvatar, setNewProfileAvatar] = useState<string>('🦊');
 
-  // Parent deposit and Trade inputs
-  const [depositAmount, setDepositAmount] = useState<string>('5');
+  // Trade inputs
   const [tradeAmountLocal, setTradeAmountLocal] = useState<string>('10');
   const [sellPercentage, setSellPercentage] = useState<number>(100);
 
@@ -321,33 +320,9 @@ export default function App() {
     }
   };
 
-  const handleParentDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProfile) return;
-    const amountNum = parseFloat(depositAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
-      alert('Please enter a valid positive deposit amount!');
-      return;
-    }
+  // Allowance deposits are managed directly in Firefly III —
+  // the app reads live balances so any Firefly III deposit is instantly reflected.
 
-    try {
-      const res = await fetch(`/api/profiles/${selectedProfile.name}/deposit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: amountNum }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        alert(data.message);
-        setDepositAmount('5');
-        fetchActiveProfileData(selectedProfile.name);
-      } else {
-        alert(data.error || 'Failed to deposit.');
-      }
-    } catch (err: any) {
-      alert('Error connecting to the server: ' + err.message);
-    }
-  };
 
   // Helper: derived age of active profile
   const profileAge = selectedProfile ? (new Date().getFullYear() - selectedProfile.birthYear) : 0;
@@ -1311,37 +1286,7 @@ export default function App() {
                           </button>
                         </div>
 
-                        {/* Parent Deposit / Allowance Section */}
-                        <form onSubmit={handleParentDeposit} className="bg-indigo-50/40 border border-indigo-100/50 p-4 rounded-2xl space-y-3">
-                          <div>
-                            <span className="font-extrabold text-indigo-950 text-xs flex items-center gap-1.5">
-                              <Coins className="w-4.5 h-4.5 text-indigo-500" />
-                              <span>{t('settings.parentDeposit')}</span>
-                            </span>
-                            <p className="text-[10px] text-indigo-600/80 font-bold mt-0.5">{t('settings.depositDesc')}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <div className="relative flex-1">
-                              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-indigo-500">₪</span>
-                              <input
-                                type="number"
-                                required
-                                min={1}
-                                step={0.5}
-                                value={depositAmount}
-                                onChange={(e) => setDepositAmount(e.target.value)}
-                                className="w-full pl-8 pr-3 py-2 text-xs font-extrabold bg-white border border-indigo-200 rounded-xl outline-none focus:border-indigo-500 transition-all text-slate-800"
-                              />
-                            </div>
-                            <button
-                              type="submit"
-                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-[10px] shadow-md hover:shadow-indigo-100 transition-all uppercase tracking-wider cursor-pointer"
-                            >
-                              {t('settings.depositButton')}
-                            </button>
-                          </div>
-                        </form>
-                      </div>
+                    </div>
                     </div>
 
                     {/* Dangerous Parent Actions */}

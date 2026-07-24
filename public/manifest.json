@@ -1,0 +1,22 @@
+{
+  "name": "Firefly Junior Broker",
+  "short_name": "Jr Broker",
+  "description": "Gamified brokerage sandbox for kids — learn investing with real stocks.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
