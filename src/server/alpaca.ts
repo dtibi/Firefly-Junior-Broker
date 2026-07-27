@@ -99,7 +99,7 @@ const BASE_PRICES: Record<string, number> = {
   AAPL: 224.8,
   TSLA: 258.4,
   MSFT: 415.6,
-  NTDOY: 13.8,
+  NTDOY: 10.50,
   GOOGL: 172.1,
   NVDA: 118.2,
 };
@@ -182,7 +182,9 @@ export const MarketService = {
         // Fetch latest trade (actual market price) and Yahoo Finance daily bars (prevClose/high/low)
         const [tradeRes, yahooRes] = await Promise.all([
           fetch(`https://data.alpaca.markets/v2/stocks/${ticker}/trades/latest`, { headers }),
-          fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5d&interval=1d`),
+          fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5d&interval=1d`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          }),
         ]);
 
         let price = basePrice;
@@ -199,6 +201,7 @@ export const MarketService = {
         }
 
         // Yahoo Finance provides real daily OHLCV data for free
+        let yahooSucceeded = false;
         if (!yahooRes.ok) {
           console.warn(`[MarketService] Yahoo Finance unavailable for ${ticker} — using synthetic prevClose/high/low`);
         }
@@ -209,15 +212,22 @@ export const MarketService = {
             const quotes = result.indicators?.quote?.[0];
             const timestamps = result.timestamp;
             if (quotes && timestamps && timestamps.length >= 2) {
-              // Second-to-last day = previous close
-              const prevIdx = timestamps.length - 2;
-              prevClose = quotes.close?.[prevIdx] || basePrice;
-              high = Math.max(price, quotes.high?.[prevIdx] || price);
-              low = Math.min(price, quotes.low?.[prevIdx] || price);
-              volume = quotes.volume?.[prevIdx] || 0;
+              // Walk backwards from second-to-last to skip nulls (weekends/holidays)
+              for (let i = timestamps.length - 2; i >= 0; i--) {
+                const c = quotes.close?.[i];
+                if (c != null) {
+                  prevClose = c;
+                  volume = quotes.volume?.[i] || 0;
+                  high = quotes.high?.[i] != null ? Math.max(price, quotes.high[i]) : high;
+                  low = quotes.low?.[i] != null ? Math.min(price, quotes.low[i]) : low;
+                  yahooSucceeded = true;
+                  break;
+                }
+              }
             } else if (timestamps?.length === 1) {
               prevClose = quotes?.close?.[0] || basePrice;
               volume = quotes?.volume?.[0] || 0;
+              yahooSucceeded = true;
             }
 
             // If Alpaca didn't return a live price but Yahoo has data,
@@ -233,24 +243,73 @@ export const MarketService = {
           }
         }
 
-        const changePercent = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+        // If Yahoo Finance failed but Alpaca returned a real price,
+        // avoid bogus change% by setting prevClose to the current price
+        if (!yahooSucceeded && price !== basePrice) {
+          prevClose = price;
+          high = price;
+          low = price;
+        }
 
-        return {
-          ticker,
-          name: info.name,
-          heName: info.heName,
-          logo: info.logo,
-          sector: info.sector,
-          priceUsd: Number(price.toFixed(2)),
-          changePercent: Number(changePercent.toFixed(2)),
-          high24h: Number(high.toFixed(2)),
-          low24h: Number(low.toFixed(2)),
-          prevClose: Number(prevClose.toFixed(2)),
-          volume,
-          lastUpdated: dataTimestamp || new Date().toISOString(),
-        };
+        // Only return if we actually got real data (not the fallback basePrice)
+        if (price !== basePrice || yahooSucceeded) {
+          const changePercent = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+
+          return {
+            ticker,
+            name: info.name,
+            heName: info.heName,
+            logo: info.logo,
+            sector: info.sector,
+            priceUsd: Number(price.toFixed(2)),
+            changePercent: Number(changePercent.toFixed(2)),
+            high24h: Number(high.toFixed(2)),
+            low24h: Number(low.toFixed(2)),
+            prevClose: Number(prevClose.toFixed(2)),
+            volume,
+            lastUpdated: dataTimestamp || new Date().toISOString(),
+          };
+        }
       } catch (err) {
         console.error(`Alpaca query failed for ${ticker}, falling back to simulator.`, err);
+      }
+    }
+
+    // Alpha Vantage fallback — supports OTC/ADR stocks (NTDOY, etc.) not on Alpaca
+    const alphaVantageKey = process.env.ALPHA_VANTAGE_API_KEY;
+    if (alphaVantageKey) {
+      try {
+        const avUrl = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${alphaVantageKey}`;
+        const avRes = await fetch(avUrl);
+        if (avRes.ok) {
+          const avData = await avRes.json();
+          const quote = avData?.['Global Quote'];
+          if (quote?.['05. price']) {
+            const avPrice = parseFloat(quote['05. price']);
+            const avPrevClose = parseFloat(quote['08. previous close']) || avPrice;
+            const avChangePct = parseFloat((quote['10. change percent'] || '0').replace('%', ''));
+            const avHigh = parseFloat(quote['03. high']) || avPrice;
+            const avLow = parseFloat(quote['04. low']) || avPrice;
+            const avVolume = parseInt(quote['06. volume']) || 0;
+
+            return {
+              ticker,
+              name: info.name,
+              heName: info.heName,
+              logo: info.logo,
+              sector: info.sector,
+              priceUsd: Number(avPrice.toFixed(2)),
+              changePercent: Number(avChangePct.toFixed(2)),
+              high24h: Number(avHigh.toFixed(2)),
+              low24h: Number(avLow.toFixed(2)),
+              prevClose: Number(avPrevClose.toFixed(2)),
+              volume: avVolume,
+              lastUpdated: quote['07. latest trading day'] || new Date().toISOString(),
+            };
+          }
+        }
+      } catch (avErr) {
+        console.warn(`[MarketService] Alpha Vantage fallback failed for ${ticker}`, avErr);
       }
     }
 
