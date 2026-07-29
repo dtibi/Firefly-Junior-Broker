@@ -695,7 +695,7 @@ export default function App() {
               </div>
 
               {/* TAB VIEWS */}
-              <AnimatePresence mode="wait">
+              <AnimatePresence>
                 
                 {/* 1. VAULT / DASHBOARD TAB */}
                 {activeTab === 'dashboard' && (

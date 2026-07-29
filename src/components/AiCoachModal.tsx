@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Sparkles, X, Volume2, BookOpen, Star, HelpCircle } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { useTranslation } from '../i18n/useTranslation';
 
 interface AiCoachModalProps {
@@ -47,6 +47,15 @@ export default function AiCoachModal({
 
     fetchGuide();
   }, [ticker, profileName]);
+
+  // Clean up speech synthesis on unmount to prevent DOM conflicts
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   // Read tutorial text aloud with client-side SpeechSynthesis if available
   const handleSpeak = () => {
