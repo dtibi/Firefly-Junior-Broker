@@ -89,6 +89,15 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     sector: 'מוחות רובוטיים',
     logo: '🤖',
   },
+  INTC: {
+    ticker: 'INTC',
+    name: 'Intel',
+    heName: 'אינטל',
+    description: 'Intel makes the tiny brain chips (processors) that power almost every computer and laptop in the world!',
+    childAnalogy: 'If computers were people, Intel chips would be the brain inside their heads — they do all the thinking!',
+    sector: 'מחשבים ושבבים',
+    logo: '💻',
+  },
 };
 
 // Simulated base prices for realistic volatility if Alpaca API keys are not supplied
@@ -102,6 +111,7 @@ const BASE_PRICES: Record<string, number> = {
   NTDOY: 10.50,
   GOOGL: 172.1,
   NVDA: 118.2,
+  INTC: 22.50,
 };
 
 // Seed-based pseudo-random generator for stable daily fluctuations

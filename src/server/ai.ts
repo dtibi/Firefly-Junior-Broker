@@ -20,6 +20,10 @@ const PRE_PACKAGED_TUTORIALS: Record<string, Record<number, string>> = {
     8: `Hey! 🍎 Look around you—do you see an iPad, iPhone, or Mac computer? Apple is the company that invents these amazing toys! When you buy Apple stock, you are helping them build the next cool tech gadget. Because so many people use their phones every single day, Apple is a very strong and powerful company. It's like having a golden apple tree in your investment garden!`,
     13: `Apple (AAPL) is one of the world's largest and most profitable technology companies. Their business model relies heavily on the 'iOS ecosystem'—once someone buys an iPhone, they often buy iPads, AirPods, and pay for services like iCloud. Apple is known for its high financial stability, but investing in it means you are tracking the global tech market and people's spending habits on premium gadgets.`,
   },
+  INTC: {
+    8: `Hey! 💻 Do you have a computer or laptop at home? Inside almost every computer there's a tiny, shiny chip called a processor — and Intel makes them! When you buy Intel stock, you own a piece of the company that builds the "brains" for computers all over the world. When schools, offices, and families buy new computers, Intel grows stronger!`,
+    13: `Intel (INTC) is one of the world's largest semiconductor companies, designing and manufacturing the CPUs that power millions of PCs and servers. Intel also produces chips for data centers, autonomous driving, and networking equipment. As a legacy chipmaker, Intel faces fierce competition from AMD and others, but its massive manufacturing footprint and long-term government partnerships (like the CHIPS Act) give it a unique "national security" moat in American manufacturing.`,
+  },
 };
 
 export const AIService = {
