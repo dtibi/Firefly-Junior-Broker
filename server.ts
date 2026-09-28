@@ -25,7 +25,7 @@ async function startServer() {
   app.get('/api/profiles', (req, res) => {
     try {
       const currentYear = new Date().getFullYear();
-      const profiles = Database.getProfiles().map((p) => ({
+      const profiles = Database.getProfiles().map(({ pinHash, ...p }) => ({
         ...p,
         age: currentYear - p.birthYear,
       }));
@@ -55,10 +55,13 @@ async function startServer() {
         executionMode: executionMode || 'INSTANT',
         savingsAccountId,
         investmentAccountId,
+        spendingAccountId: req.body.spendingAccountId,
+        transfersEnabled: req.body.transfersEnabled,
         avatar: avatar || '⭐',
       });
 
-      res.json({ success: true, profile: newProfile });
+      const { pinHash, ...safeProfile } = newProfile;
+      res.json({ success: true, profile: safeProfile });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -73,13 +76,13 @@ async function startServer() {
       }
       const success = Database.verifyPin(name, pin);
       if (success) {
-        const p = Database.getProfile(name)!;
+        const { pinHash, ...safeProfile } = Database.getProfile(name)!;
         const currentYear = new Date().getFullYear();
         res.json({
           success: true,
           profile: {
-            ...p,
-            age: currentYear - p.birthYear,
+            ...safeProfile,
+            age: currentYear - safeProfile.birthYear,
           },
         });
       } else {
@@ -96,7 +99,8 @@ async function startServer() {
       const { name } = req.params;
       const updated = Database.updateProfile(name, req.body);
       if (updated) {
-        res.json({ success: true, profile: updated });
+        const { pinHash, ...safeProfile } = updated;
+        res.json({ success: true, profile: safeProfile });
       } else {
         res.status(404).json({ success: false, error: 'Profile not found.' });
       }
