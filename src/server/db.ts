@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { Profile, Holding, Transaction, PortfolioSnapshot } from '../types.js';
+import { Profile, Holding, Transaction, PortfolioSnapshot, TransferRecord } from '../types.js';
 
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
@@ -16,6 +16,7 @@ interface Schema {
   holdings: Holding[];
   transactions: Transaction[];
   snapshots: PortfolioSnapshot[];
+  transfers: TransferRecord[]; // pocket-money -> invest-fund moves (with lock windows)
   cashBalances: Record<string, number>; // profileName -> virtual/savings cache cash in USD
   fxCache: {
     rate: number;
@@ -45,6 +46,8 @@ function initDb(): Schema {
         executionMode: 'INSTANT',
         savingsAccountId: '6',
         investmentAccountId: '26',
+        spendingAccountId: '4',
+        transfersEnabled: true,
         avatar: '🦊',
         cumulativeDeposits: 500.0,
       },
@@ -57,6 +60,8 @@ function initDb(): Schema {
         executionMode: 'INSTANT',
         savingsAccountId: '9',
         investmentAccountId: '27',
+        spendingAccountId: '7',
+        transfersEnabled: false,
         avatar: '🐼',
         cumulativeDeposits: 500.0,
       },
@@ -146,6 +151,7 @@ function initDb(): Schema {
       'נתנאל': 290.0, // Virtual liquid capital in savings (ILS)
       'רוני': 275.0,
     },
+    transfers: [],
     fxCache: null,
   };
 
@@ -167,7 +173,25 @@ function initDb(): Schema {
           p.cumulativeDeposits = isRoniLike ? 1000.0 : 500.0;
           modified = true;
         }
+        // Spending (pocket money) account + transfer enablement
+        if (p.spendingAccountId === undefined) {
+          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
+          p.spendingAccountId = isRoniLike ? '7' : '4';
+          modified = true;
+        }
+        if (p.transfersEnabled === undefined) {
+          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
+          // Roni is 6 — pocket-money → invest-fund transfers stay off until she learns the invest account.
+          p.transfersEnabled = !isRoniLike;
+          modified = true;
+        }
       });
+    }
+
+    // Migrate transfers store
+    if (!Array.isArray(parsed.transfers)) {
+      parsed.transfers = [];
+      modified = true;
     }
 
     // Migrate snapshots to have cumulativeDeposits properties
@@ -225,6 +249,8 @@ export const Database = {
       executionMode: profile.executionMode,
       savingsAccountId: profile.savingsAccountId,
       investmentAccountId: profile.investmentAccountId,
+      spendingAccountId: profile.spendingAccountId,
+      transfersEnabled: profile.transfersEnabled ?? false,
       avatar: profile.avatar || '⭐',
       cumulativeDeposits: 500.0, // standard initial capital count
     };
@@ -272,6 +298,8 @@ export const Database = {
     if (updates.executionMode) profile.executionMode = updates.executionMode;
     if (updates.savingsAccountId) profile.savingsAccountId = updates.savingsAccountId;
     if (updates.investmentAccountId) profile.investmentAccountId = updates.investmentAccountId;
+    if (updates.spendingAccountId) profile.spendingAccountId = updates.spendingAccountId;
+    if (updates.transfersEnabled !== undefined) profile.transfersEnabled = updates.transfersEnabled;
     if (updates.avatar) profile.avatar = updates.avatar;
     if (updates.name) profile.name = updates.name;
     if (updates.cumulativeDeposits !== undefined) profile.cumulativeDeposits = updates.cumulativeDeposits;
@@ -297,6 +325,7 @@ export const Database = {
     dbCache.holdings = dbCache.holdings.filter((h) => h.profileName.toLowerCase() !== name.toLowerCase());
     dbCache.transactions = dbCache.transactions.filter((t) => t.profileName.toLowerCase() !== name.toLowerCase());
     dbCache.snapshots = dbCache.snapshots.filter((s) => s.profileName.toLowerCase() !== name.toLowerCase());
+    dbCache.transfers = dbCache.transfers.filter((t) => t.profileName.toLowerCase() !== name.toLowerCase());
     delete dbCache.cashBalances[name];
     saveDb();
     return dbCache.profiles.length < initialLen;
@@ -381,11 +410,27 @@ export const Database = {
     saveDb();
   },
 
+  // Pocket-money → invest-fund transfers (each with an optional lock window)
+  getTransfers(profileName: string): TransferRecord[] {
+    return dbCache.transfers
+      .filter((t) => t.profileName.toLowerCase() === profileName.toLowerCase())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  addTransfer(record: Omit<TransferRecord, 'id'>): TransferRecord {
+    const newRecord: TransferRecord = {
+      ...record,
+      id: `tr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    };
+    dbCache.transfers.push(newRecord);
+    saveDb();
+    return newRecord;
+  },
+
   // FX Cache
   getFXCache(): { rate: number; timestamp: string } | null {
     return dbCache.fxCache;
   },
-
   saveFXCache(rate: number) {
     dbCache.fxCache = {
       rate,

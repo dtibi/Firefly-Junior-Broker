@@ -8,7 +8,7 @@ import express from 'express';
 import * as path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { Database } from './src/server/db.js';
-import { MarketService } from './src/server/alpaca.js';
+import { MarketService, STOCK_CATEGORIES } from './src/server/alpaca.js';
 import { LedgerService } from './src/server/firefly.js';
 import { AIService } from './src/server/ai.js';
 import { TradeRequest, TradeResponse } from './src/types.js';
@@ -132,8 +132,13 @@ async function startServer() {
       const holdings = Database.getHoldings(profileName);
       const fxRate = await MarketService.getILSExchangeRate();
 
+      // Live financial breakdown from Firefly III: the three pockets
+      // (pocket money / invest fund / invested principal) + the real
+      // "money in from outside" baseline that the performance chart needs.
+      const financials = await LedgerService.getFinancialBreakdown(profile);
+
       // Fetch live balance from Firefly III savings account (fall back to local cache)
-      const liveBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
+      const liveBalance = financials?.accounts.savings?.balance ?? await LedgerService.getAccountBalance(profile.savingsAccountId);
       const rawCashBalance = liveBalance ?? Database.getCashBalance(profileName);
 
       // Fetch active pricing for all holdings
@@ -172,11 +177,40 @@ async function startServer() {
       // Compute USD-equivalent and total wealth based on currency mode.
       const fxFactor = profile.currencyMode === 'PARITY' ? 1.0 : fxRate;
       const cashValueUsd = profile.currencyMode === 'PARITY' ? rawCashBalance : (rawCashBalance * fxFactor);
-      const portfolioTotalUsd = cashValueUsd + totalStockValueUsd;
+      const portfolioTotalUsd = cashValueUsd + totalStockValueUsd; // invested world: fund + stocks
       const portfolioTotalLocal = profile.currencyMode === 'PARITY' ? portfolioTotalUsd : (portfolioTotalUsd / fxFactor);
+
+      // ---- The three pockets -------------------------------------------------
+      const pocketLocal = Number((financials?.accounts.checking?.balance ?? 0).toFixed(2));
+      const investFundLocal = Number(rawCashBalance.toFixed(2));
+      const stocksLocal = Number((totalStockValueUsd / fxFactor).toFixed(2));
+      const investedWorldLocal = Number((investFundLocal + stocksLocal).toFixed(2));
+      const totalMoneyLocal = Number((pocketLocal + investedWorldLocal).toFixed(2));
+
+      // ---- Baselines: money that came in from OUTSIDE ------------------------
+      // Allowance / work income / pocket-money transfers raise the baseline, so
+      // they are never reported as investment profit. Bank-of-Dad flows are the
+      // trading profit/loss itself and are excluded from the baseline.
+      const investedFromOutsideLocal = Number(
+        (financials?.investedFromOutsideLocal ?? profile.cumulativeDeposits ?? 0).toFixed(2)
+      );
+      const totalExternalLocal = Number(
+        (financials?.externalDepositsLocal ?? profile.cumulativeDeposits ?? 0).toFixed(2)
+      );
+      const realizedPnlLocal = Number((financials?.realizedPnlLocal ?? 0).toFixed(2));
+      const investedProfitLocal = Number((investedWorldLocal - investedFromOutsideLocal).toFixed(2));
+      const totalProfitLocal = Number((totalMoneyLocal - totalExternalLocal).toFixed(2));
 
       const transactions = Database.getTransactions(profileName);
       const snapshots = Database.getSnapshots(profileName);
+      const transfers = Database.getTransfers(profileName);
+      const nowMs = Date.now();
+      const lockedLocal = Number(
+        transfers
+          .filter((t) => new Date(t.lockedUntil).getTime() > nowMs)
+          .reduce((sum, t) => sum + t.amountLocal, 0)
+          .toFixed(2)
+      );
 
       res.json({
         success: true,
@@ -190,10 +224,31 @@ async function startServer() {
           stockValueLocal: Number((totalStockValueUsd / fxFactor).toFixed(2)),
           totalWealthUsd: Number(portfolioTotalUsd.toFixed(2)),
           totalWealthLocal: Number(portfolioTotalLocal.toFixed(2)),
+          // pocket breakdown
+          pocketLocal,
+          investFundLocal,
+          stocksLocal,
+          investedWorldLocal,
+          totalMoneyLocal,
+          // money in from outside vs. real profit
+          investedFromOutsideLocal,
+          totalExternalLocal,
+          realizedPnlLocal,
+          investedProfitLocal,
+          totalProfitLocal,
+          fireflyAccounts: {
+            spending: profile.spendingAccountId ?? null,
+            savings: profile.savingsAccountId,
+            investment: profile.investmentAccountId,
+          },
         },
         holdings: activeHoldings,
         transactions,
         snapshots,
+        transfers,
+        lockedLocal,
+        transfersEnabled: profile.transfersEnabled === true,
+        financialsFetchedAt: financials?.fetchedAt ?? null,
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
@@ -204,7 +259,7 @@ async function startServer() {
   app.get('/api/stocks', async (req, res) => {
     try {
       const quotes = await MarketService.getAllStockQuotes();
-      res.json({ success: true, stocks: quotes });
+      res.json({ success: true, stocks: quotes, categories: STOCK_CATEGORIES });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -360,6 +415,7 @@ async function startServer() {
 
         // Keep local cache in sync with Firefly III for fallback resilience
         Database.updateCashBalance(profileName, currentCashLocal - investFiat);
+        LedgerService.invalidateBreakdown(profileName);
 
         return res.json({
           success: true,
@@ -404,6 +460,7 @@ async function startServer() {
         if (sellBalance !== null) {
           Database.updateCashBalance(profileName, sellBalance);
         }
+        LedgerService.invalidateBreakdown(profileName);
 
         const totalLiquidationUsd = sharesToSell * quote.priceUsd;
         const totalLiquidationLocal = profile.currencyMode === 'PARITY' ? totalLiquidationUsd : (totalLiquidationUsd / fxFactor);
@@ -458,8 +515,9 @@ async function startServer() {
       const fxRate = await MarketService.getILSExchangeRate();
 
       for (const p of profiles) {
-        const liveBalance = await LedgerService.getAccountBalance(p.savingsAccountId);
-        const cashLocal = liveBalance ?? Database.getCashBalance(p.name);
+        const financials = await LedgerService.getFinancialBreakdown(p);
+        const cashLocal = financials?.accounts.savings?.balance ?? Database.getCashBalance(p.name);
+        const pocketLocal = financials?.accounts.checking?.balance ?? 0;
         const holdings = Database.getHoldings(p.name);
 
         let totalStockValueUsd = 0;
@@ -475,8 +533,10 @@ async function startServer() {
         const fxFactor = p.currencyMode === 'PARITY' ? 1.0 : fxRate;
         const cashUsd = p.currencyMode === 'PARITY' ? cashLocal : (cashLocal * fxFactor);
         const totalValueUsd = cashUsd + totalStockValueUsd;
-        
-        const cumulativeDepositsLocal = p.cumulativeDeposits || 500.0;
+
+        // The baseline is the money that really came in from outside (allowance,
+        // work income, pocket-money transfers) — never trading profit.
+        const cumulativeDepositsLocal = financials?.investedFromOutsideLocal ?? (p.cumulativeDeposits || 0);
         const cumulativeDepositsUsd = p.currencyMode === 'PARITY' ? cumulativeDepositsLocal : (cumulativeDepositsLocal * fxFactor);
 
         Database.addSnapshot({
@@ -488,10 +548,141 @@ async function startServer() {
           cumulativeDepositsUsd: Number(cumulativeDepositsUsd.toFixed(2)),
           cumulativeDepositsLocal: Number(cumulativeDepositsLocal.toFixed(2)),
           totalValueLocal: p.currencyMode === 'PARITY' ? Number(totalValueUsd.toFixed(2)) : Number((totalValueUsd / fxFactor).toFixed(2)),
+          spendingLocal: Number(pocketLocal.toFixed(2)),
+          investFundLocal: Number(cashLocal.toFixed(2)),
         });
       }
 
       res.json({ success: true, message: `Valuation snapshots successfully recorded for ${profiles.length} profiles for date ${dateStr}.` });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 12. Pocket money → invest fund transfer (kid-initiated, PIN-protected)
+  app.post('/api/profiles/:name/transfer', async (req, res) => {
+    try {
+      const { name } = req.params;
+      const { pin, amount, lockDays } = req.body as { pin?: string; amount?: number; lockDays?: number };
+
+      const profile = Database.getProfile(name);
+      if (!profile) return res.status(404).json({ success: false, error: 'Profile not found.' });
+      if (profile.transfersEnabled !== true) {
+        return res.status(403).json({
+          success: false,
+          error: 'Moving pocket money into the invest fund is not open for this profile yet.',
+        });
+      }
+      if (!profile.spendingAccountId) {
+        return res.status(400).json({ success: false, error: 'No pocket-money account is linked to this profile.' });
+      }
+      if (!pin || !Database.verifyPin(profile.name, pin)) {
+        return res.status(401).json({ success: false, error: 'Incorrect 4-digit PIN! Authorization failed.' });
+      }
+
+      const amountLocal = Number(amount);
+      if (!Number.isFinite(amountLocal) || amountLocal < 10) {
+        return res.status(400).json({
+          success: false,
+          error: 'Minimum transfer is ₪/$$ 10 — the same as the minimum stock purchase.',
+        });
+      }
+      const days = [30, 90, 365].includes(Number(lockDays)) ? Number(lockDays) : 90;
+
+      const financials = await LedgerService.getFinancialBreakdown(profile);
+      const pocketBalance = financials?.accounts.checking?.balance ?? 0;
+      const keepInPocket = 10; // never empty the pocket completely
+      if (amountLocal > pocketBalance - keepInPocket) {
+        return res.status(400).json({
+          success: false,
+          error: `Not enough pocket money. You have ₪/$$ ${pocketBalance.toFixed(2)} and we always keep ₪/$$ ${keepInPocket.toFixed(2)} in your pocket.`,
+        });
+      }
+
+      const ffId = await LedgerService.createTransfer(
+        amountLocal,
+        `Pocket money → invest fund (promised to keep ${days} days)`,
+        profile.spendingAccountId,
+        profile.savingsAccountId
+      );
+
+      const transfer = Database.addTransfer({
+        profileName: profile.name,
+        amountLocal: Number(amountLocal.toFixed(2)),
+        lockDays: days,
+        lockedUntil: new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date().toISOString(),
+        fireflyTransactionId: ffId,
+      });
+
+      LedgerService.invalidateBreakdown(profile.name);
+
+      return res.json({
+        success: true,
+        message: `Awesome! You moved ₪/$$ ${amountLocal.toFixed(2)} from your pocket into your invest fund — and you promised not to touch it for ${days} days. 💪`,
+        transfer,
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 13. The one-way valve: money leaves the invest fund only by SELLING stock,
+  //     and only a grown-up can move it back to the pocket. Kids get the lesson
+  //     (and the countdown of the promise they made) instead of a withdrawal.
+  app.post('/api/profiles/:name/withdraw-to-pocket', (req, res) => {
+    const profile = Database.getProfile(req.params.name);
+    if (!profile) return res.status(404).json({ success: false, error: 'Profile not found.' });
+
+    const locked = Database.getTransfers(profile.name).filter(
+      (t) => new Date(t.lockedUntil).getTime() > Date.now()
+    );
+    const lockedTotal = locked.reduce((sum, t) => sum + t.amountLocal, 0);
+    const daysLeft = locked.length
+      ? Math.ceil((new Date(locked[0].lockedUntil).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+      : 0;
+
+    const error = locked.length
+      ? `Not yet! ₪/$$ ${lockedTotal.toFixed(2)} of your money is locked for another ${daysLeft} days — that is the promise you made. Money that waits works for you. 🌱`
+      : 'Invested money stays invested — that is the whole trick! If you really need money, ask a grown-up: only they can move money out of the invest fund. 🏦';
+
+    return res.status(403).json({ success: false, error });
+  });
+
+  // 14. Maintenance: rebuild the chart baseline of every historical snapshot
+  //     from the real Firefly III deposit history (one-off, safe to re-run).
+  app.post('/api/admin/recalc-snapshots', async (req, res) => {
+    try {
+      const fxRate = await MarketService.getILSExchangeRate();
+      const report: any[] = [];
+
+      for (const p of Database.getProfiles()) {
+        const financials = await LedgerService.getFinancialBreakdown(p);
+        if (!financials) {
+          report.push({ profile: p.name, updated: 0, error: 'Firefly breakdown unavailable' });
+          continue;
+        }
+
+        let updated = 0;
+        for (const snapshot of Database.getSnapshots(p.name)) {
+          const baseline = await LedgerService.getInvestedBaselineAsOf(p.name, snapshot.date);
+          if (baseline === null) continue;
+          Database.addSnapshot({
+            ...snapshot,
+            cumulativeDepositsLocal: baseline,
+            cumulativeDepositsUsd: p.currencyMode === 'PARITY' ? baseline : Number((baseline * fxRate).toFixed(2)),
+          });
+          updated += 1;
+        }
+
+        report.push({
+          profile: p.name,
+          updated,
+          baselineToday: financials.investedFromOutsideLocal,
+        });
+      }
+
+      res.json({ success: true, report });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }

@@ -15,8 +15,23 @@ export interface Profile {
   executionMode: ExecutionMode;
   savingsAccountId: string;
   investmentAccountId: string;
+  /** Firefly account the kid spends from (pocket money). */
+  spendingAccountId?: string;
+  /** Whether the kid may move money from the spending account into the invest fund. */
+  transfersEnabled?: boolean;
   avatar: string; // Emoji or theme color
   cumulativeDeposits?: number; // local/fiat cumulative deposits
+}
+
+/** A pocket-money → invest-fund transfer, optionally locked for a while. */
+export interface TransferRecord {
+  id: string;
+  profileName: string;
+  amountLocal: number;
+  lockDays: number;
+  lockedUntil: string;
+  createdAt: string;
+  fireflyTransactionId: string;
 }
 
 export interface Holding {
@@ -50,6 +65,10 @@ export interface PortfolioSnapshot {
   cumulativeDepositsUsd?: number;
   cumulativeDepositsLocal?: number;
   totalValueLocal?: number;
+  /** Pocket money (spending account) balance in local currency at snapshot time. */
+  spendingLocal?: number;
+  /** Invest-fund (savings account) balance in local currency. */
+  investFundLocal?: number;
 }
 
 export interface StockInfo {
@@ -57,8 +76,10 @@ export interface StockInfo {
   name: string;
   heName?: string;
   description: string;
+  heDescription?: string;
   childAnalogy: string;
   sector: string;
+  category?: string;
   logo: string;
 }
 
@@ -68,6 +89,11 @@ export interface StockQuote {
   heName?: string;
   logo?: string;
   sector?: string;
+  category?: string;
+  /** Plain-language explanation of what the company does (EN / HE). */
+  description?: string;
+  heDescription?: string;
+  childAnalogy?: string;
   priceUsd: number;
   changePercent: number;
   high24h: number;
