@@ -78,6 +78,29 @@ const en = {
     totalSavingsPutIn: 'Total Savings Put In',
     marketGainsReturns: 'Market Gains / Returns',
     noSnapshotCurve: 'No Snapshot Curve Available Yet',
+    pocketMoney: 'Pocket Money',
+    investFund: 'Invest Fund',
+    moneyFromOutside: 'Money In From Outside',
+    realProfit: 'Real Profit',
+  },
+
+  pockets: {
+    title: 'My Pockets',
+    lockedUntil: 'is locked',
+    days: 'days left',
+    moveToFund: 'MOVE POCKET MONEY TO MY INVEST FUND',
+    tryWithdraw: 'I want to take money back out…',
+    valveNote: 'Pocket money can always move INTO the invest fund. Money comes OUT only by selling stocks — and only a grown-up can move it back to your pocket.',
+    notYetEnabled: 'Moving pocket money into the invest fund is not open for this profile yet — ask a grown-up to switch it on.',
+    transferTitle: 'Move Pocket Money to the Invest Fund',
+    transferDesc: 'Your pocket money moves into your invest fund, where you can invest it in stocks.',
+    amount: 'How much?',
+    promise: 'How long do you promise not to touch it?',
+    lock30: '1 month',
+    lock90: '3 months',
+    lock365: '1 year',
+    promiseNote: 'The longer you promise, the more time your money has to grow. While the promise runs, your money stays locked.',
+    confirm: 'CONFIRM WITH PIN',
   },
 
   stocks: {
@@ -99,6 +122,9 @@ const en = {
     selectInvestment: 'Select an Investment',
     selectInvestmentHint: 'Click on one of the companies on the left to learn how their stock functions, see live price charts, and execute mock trades!',
     stockPrice: 'Stock Price',
+    searchPlaceholder: 'Search a company or a ticker…',
+    allCategories: 'ALL',
+    whatIsThis: 'What is this company?',
   },
 
   ledger: {
@@ -149,6 +175,7 @@ const en = {
     loginTitle: 'Log In to',
     buyTitle: 'Authorize BUY Trade',
     sellTitle: 'Authorize SELL Trade',
+    transferTitle: 'Authorize MOVE TO INVEST FUND',
     enterPin: 'Enter 4-digit PIN',
     authorizing: 'Authorizing: Trade transaction on',
     incorrectPin: 'Incorrect PIN! Try again.',
@@ -170,7 +197,7 @@ const en = {
 
   chart: {
     totalWealthGrowth: 'Total Wealth Growth Curve',
-    netSavingsDeposited: 'Net Savings Deposited (Allowance baseline)',
+    netSavingsDeposited: 'Money In From Outside (not profit)',
     totalWealth: 'Total Wealth',
     mySavings: 'My Savings',
     marketReturn: 'Market Return',
@@ -286,6 +313,29 @@ const he: typeof en = {
     totalSavingsPutIn: 'סך החסכונות שהופקדו',
     marketGainsReturns: 'רווחי שוק / תשואות',
     noSnapshotCurve: 'אין עדיין עקומת תמונת מצב',
+    pocketMoney: 'כסף בכיס',
+    investFund: 'קרן ההשקעה',
+    moneyFromOutside: 'כסף שנכנס מבחוץ',
+    realProfit: 'רווח אמיתי',
+  },
+
+  pockets: {
+    title: 'הכיסים שלי',
+    lockedUntil: 'נעול',
+    days: 'ימים נותרו',
+    moveToFund: 'העבר כסף מהכיס לקרן ההשקעה',
+    tryWithdraw: 'אני רוצה להוציא כסף חזרה…',
+    valveNote: 'כסף מהכיס תמיד יכול להיכנס לקרן ההשקעה. החוצה הוא יוצא רק במכירת מניות — ורק מבוגר יכול להעביר אותו חזרה לכיס.',
+    notYetEnabled: 'העברת כסף מהכיס לקרן ההשקעה עדיין לא פתוחה בפרופיל הזה — בקשו ממבוגר להפעיל.',
+    transferTitle: 'העברת כסף מהכיס לקרן ההשקעה',
+    transferDesc: 'הכסף יעבור מהכיס שלך לקרן ההשקעה, ומשם אפשר לקנות איתו מניות.',
+    amount: 'כמה?',
+    promise: 'לכמה זמן אתה מבטיח לא לגעת בכסף?',
+    lock30: 'חודש',
+    lock90: '3 חודשים',
+    lock365: 'שנה',
+    promiseNote: 'ככל שההבטחה ארוכה יותר — לכסף יש יותר זמן לגדול. בזמן ההבטחה הכסף נשאר נעול.',
+    confirm: 'אישור עם קוד סודי',
   },
 
   stocks: {
@@ -307,6 +357,9 @@ const he: typeof en = {
     selectInvestment: 'בחר השקעה',
     selectInvestmentHint: 'לחץ על אחת החברות משמאל כדי ללמוד איך המניה שלהן עובדת, לראות גרפי מחירים חיים ולבצע עסקאות מדומות!',
     stockPrice: 'מחיר מניה',
+    searchPlaceholder: 'חיפוש חברה או טיקר…',
+    allCategories: 'הכל',
+    whatIsThis: 'מה זו החברה הזאת?',
   },
 
   ledger: {
@@ -355,8 +408,9 @@ const he: typeof en = {
   pinPad: {
     security: 'אבטחת הורה וילד',
     loginTitle: 'התחבר אל',
-    buyTitle: 'אשר עסקת קנייה',
-    sellTitle: 'אשר עסקת מכירה',
+    buyTitle: 'אישור קנייה',
+    sellTitle: 'אישור מכירה',
+    transferTitle: 'אישור העברה לקרן ההשקעה',
     enterPin: 'הכנס קוד סודי בן 4 ספרות',
     authorizing: 'מאשר: עסקת מסחר על',
     incorrectPin: 'קוד שגוי! נסה שוב.',
@@ -378,7 +432,7 @@ const he: typeof en = {
 
   chart: {
     totalWealthGrowth: 'עקומת צמיחת הון כולל',
-    netSavingsDeposited: 'סך חסכונות שהופקדו (קו בסיס דמי כיס)',
+    netSavingsDeposited: 'כסף שנכנס מבחוץ (לא רווח)',
     totalWealth: 'הון כולל',
     mySavings: 'החסכונות שלי',
     marketReturn: 'תשואת שוק',

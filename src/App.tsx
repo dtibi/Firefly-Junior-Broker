@@ -54,10 +54,20 @@ export default function App() {
   // Stocks list state
   const [stocks, setStocks] = useState<StockQuote[]>([]);
   const [selectedStock, setSelectedStock] = useState<StockQuote | null>(null);
-  
+  const [stockCategories, setStockCategories] = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [stockSearch, setStockSearch] = useState<string>('');
+  const [stockHistory, setStockHistory] = useState<{ date: string; price: number }[]>([]);
+
+  // Pockets: pocket-money → invest-fund transfers with a "promise" lock window
+  const [transfers, setTransfers] = useState<any[]>([]);
+  const [showTransfer, setShowTransfer] = useState<boolean>(false);
+  const [transferAmount, setTransferAmount] = useState<string>('10');
+  const [transferLockDays, setTransferLockDays] = useState<number>(90);
+
   // UI Sub-modals & loaders
   const [activeTab, setActiveTab] = useState<'dashboard' | 'stocks' | 'ledger' | 'settings'>('dashboard');
-  const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | null>(null);
+  const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | 'transfer' | null>(null);
   const [targetProfileToLogin, setTargetProfileToLogin] = useState<Profile | null>(null);
   const [showAiModal, setShowAiModal] = useState<string | null>(null); // stock ticker
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -134,6 +144,7 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setStocks(data.stocks);
+        if (Array.isArray(data.categories)) setStockCategories(data.categories);
       }
     } catch (e) {
       console.error('Error fetching stock catalog:', e);
@@ -150,12 +161,61 @@ export default function App() {
         setHoldings(data.holdings);
         setHistory(data.transactions);
         setSnapshots(data.snapshots);
+        setTransfers(Array.isArray(data.transfers) ? data.transfers : []);
       }
     } catch (e) {
       console.error('Error fetching profile portfolio data:', e);
     } finally {
       setIsRefreshing(false);
     }
+  };
+
+  // Real daily price history for the selected stock (replaces the old fake curve)
+  useEffect(() => {
+    if (!selectedStock) {
+      setStockHistory([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/stocks/${selectedStock.ticker}/history?range=1M`);
+        const data = await res.json();
+        if (!cancelled && data.success && Array.isArray(data.history) && data.history.length > 1) {
+          setStockHistory(data.history);
+        }
+      } catch (e) {
+        console.error('Error fetching price history:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStock?.ticker]);
+
+  // Locked pocket-money promises that are still running
+  const activeLocks = transfers.filter((tr) => new Date(tr.lockedUntil).getTime() > Date.now());
+  const lockedTotal = activeLocks.reduce((sum, tr) => sum + (tr.amountLocal || 0), 0);
+
+  const daysLeftFor = (iso: string) =>
+    Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+
+  // Stock directory filtering: category chips + free-text search
+  const filteredStocks = stocks.filter((s) => {
+    const q = stockSearch.trim().toLowerCase();
+    const matchesCategory = !activeCategory || s.category === activeCategory;
+    const matchesSearch =
+      !q ||
+      s.ticker.toLowerCase().includes(q) ||
+      (s.name || '').toLowerCase().includes(q) ||
+      (s.heName || '').includes(q);
+    return matchesCategory && matchesSearch;
+  });
+
+  const categoryLabel = (id: string) => {
+    const cat = stockCategories.find((c) => c.id === id);
+    if (!cat) return id;
+    return `${cat.emoji} ${locale === 'he' ? cat.he : cat.en}`;
   };
 
   const handleProfileLoginClick = (profile: Profile) => {
@@ -247,6 +307,34 @@ export default function App() {
         }
       } catch (e: any) {
         setErrorText('Could not contact the trade execution ledger.');
+      }
+      return false;
+    }
+
+    if (showPinPad === 'transfer' && selectedProfile) {
+      try {
+        const res = await fetch(`/api/profiles/${encodeURIComponent(selectedProfile.name)}/transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            pin,
+            amount: parseFloat(transferAmount),
+            lockDays: transferLockDays,
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setSuccessText(data.message);
+          setErrorText(null);
+          setShowPinPad(null);
+          setShowTransfer(false);
+          fetchActiveProfileData(selectedProfile.name);
+          return true;
+        }
+        setErrorText(data.error);
+        setShowPinPad(null);
+      } catch (e: any) {
+        setErrorText('Could not contact the ledger for the transfer.');
       }
       return false;
     }
@@ -715,28 +803,43 @@ export default function App() {
                         </div>
                         <h4 className="text-[10px] font-bold text-indigo-200 tracking-widest uppercase">{t('dashboard.combinedWealth')}</h4>
                         <div className="text-4xl font-extrabold mt-2 tracking-tight">
-                          {selectedProfile.currencyMode === 'PARITY' ? '₪' : '₪'}
-                          {summary.totalWealthLocal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ₪{(summary.totalMoneyLocal ?? summary.totalWealthLocal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         {selectedProfile.currencyMode === 'REAL' && (
                           <p className="text-[10px] text-indigo-200 font-extrabold uppercase mt-2">
                             {t('dashboard.equivalentTo')} ${summary.totalWealthUsd.toFixed(2)} USD (at ₪1 ILS = ${summary.fxRate.toFixed(2)} USD)
                           </p>
                         )}
-                        
-                        <div className="border-t border-indigo-400/30 mt-6 pt-4 grid grid-cols-2 gap-4">
+
+                        <div className="border-t border-indigo-400/30 mt-6 pt-4 grid grid-cols-3 gap-3">
                           <div>
-                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.liquidCash')}</span>
-                            <p className="text-lg font-extrabold text-white mt-0.5">
-                              {t('common.ils')}{summary.cashLocal.toFixed(2)}
+                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.pocketMoney')}</span>
+                            <p className="text-base font-extrabold text-white mt-0.5">
+                              ₪{(summary.pocketLocal ?? 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.investFund')}</span>
+                            <p className="text-base font-extrabold text-white mt-0.5">
+                              ₪{(summary.investFundLocal ?? summary.cashLocal ?? 0).toFixed(2)}
                             </p>
                           </div>
                           <div>
                             <span className="text-[10px] text-indigo-200 font-bold uppercase tracking-wider">{t('dashboard.investedStocks')}</span>
-                            <p className="text-lg font-extrabold text-white mt-0.5">
-                              {t('common.ils')}{summary.stockValueLocal.toFixed(2)}
+                            <p className="text-base font-extrabold text-white mt-0.5">
+                              ₪{(summary.stocksLocal ?? summary.stockValueLocal ?? 0).toFixed(2)}
                             </p>
                           </div>
+                        </div>
+
+                        {/* The honest split: money that came in vs. money earned */}
+                        <div className="border-t border-indigo-400/30 mt-4 pt-3 flex flex-wrap justify-between gap-2 text-[11px] font-bold">
+                          <span className="text-indigo-200">
+                            {t('dashboard.moneyFromOutside')}: ₪{(summary.investedFromOutsideLocal ?? 0).toFixed(2)}
+                          </span>
+                          <span className={((summary.investedProfitLocal ?? 0) >= 0) ? 'text-emerald-200' : 'text-rose-200'}>
+                            {t('dashboard.realProfit')}: ₪{(summary.investedProfitLocal ?? 0).toFixed(2)}
+                          </span>
                         </div>
                       </div>
 
@@ -761,6 +864,79 @@ export default function App() {
                             <span className="text-slate-800 font-extrabold font-mono text-[11px]">#{selectedProfile.investmentAccountId}</span>
                           </div>
                         </div>
+                      </div>
+
+                      {/* Pockets + the pocket-money → invest-fund transfer
+                          (option ב: one-way valve + a "promise" lock window) */}
+                      <div className="bg-white rounded-[28px] p-6 border border-slate-200 shadow-sm space-y-4">
+                        <div className="flex justify-between items-center">
+                          <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('pockets.title')}</h4>
+                          {lockedTotal > 0 && (
+                            <span className="bg-amber-50 text-amber-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-amber-100">
+                              🔒 ₪{lockedTotal.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3">
+                            <span className="text-[10px] font-bold uppercase text-emerald-700">{t('dashboard.pocketMoney')}</span>
+                            <p className="text-lg font-extrabold text-emerald-900">₪{(summary.pocketLocal ?? 0).toFixed(2)}</p>
+                          </div>
+                          <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3">
+                            <span className="text-[10px] font-bold uppercase text-indigo-700">{t('dashboard.investFund')}</span>
+                            <p className="text-lg font-extrabold text-indigo-900">₪{(summary.investFundLocal ?? 0).toFixed(2)}</p>
+                          </div>
+                        </div>
+
+                        {activeLocks.length > 0 && (
+                          <div className="space-y-2">
+                            {activeLocks.map((tr: any) => (
+                              <div
+                                key={tr.id}
+                                className="bg-amber-50/60 border border-amber-100 rounded-2xl p-3 text-xs flex justify-between items-center gap-2"
+                              >
+                                <span className="font-bold text-amber-800">
+                                  🔒 ₪{tr.amountLocal.toFixed(2)} {t('pockets.lockedUntil')}
+                                </span>
+                                <span className="font-extrabold text-amber-900">
+                                  {daysLeftFor(tr.lockedUntil)} {t('pockets.days')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {selectedProfile.transfersEnabled === true ? (
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => setShowTransfer(true)}
+                              disabled={(summary.pocketLocal ?? 0) < 10}
+                              className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+                            >
+                              🏦 {t('pockets.moveToFund')}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch(
+                                  `/api/profiles/${encodeURIComponent(selectedProfile.name)}/withdraw-to-pocket`,
+                                  { method: 'POST' }
+                                );
+                                const d = await res.json();
+                                setSuccessText(null);
+                                setErrorText(d.error || 'Invested money stays invested!');
+                              }}
+                              className="w-full px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[11px] rounded-xl transition-all cursor-pointer"
+                            >
+                              🔒 {t('pockets.tryWithdraw')}
+                            </button>
+                            <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">{t('pockets.valveNote')}</p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200/60 rounded-2xl p-3 leading-relaxed">
+                            {t('pockets.notYetEnabled')}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -880,8 +1056,44 @@ export default function App() {
                         <p className="text-xs text-slate-500 font-semibold mt-0.5">{t('stocks.marketplaceDesc')}</p>
                       </div>
 
+                      {/* Search + category chips (the directory now has 44 tickers) */}
+                      <div className="space-y-3">
+                        <input
+                          type="text"
+                          value={stockSearch}
+                          onChange={(e) => setStockSearch(e.target.value)}
+                          placeholder={t('stocks.searchPlaceholder')}
+                          className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        />
+                        <div className="flex flex-wrap gap-1.5">
+                          <button
+                            onClick={() => setActiveCategory(null)}
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                              activeCategory === null
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            {t('stocks.allCategories')} ({stocks.length})
+                          </button>
+                          {stockCategories.map((cat) => (
+                            <button
+                              key={cat.id}
+                              onClick={() => setActiveCategory(cat.id)}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                                activeCategory === cat.id
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              {cat.emoji} {locale === 'he' ? cat.he : cat.en}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
-                        {stocks.map((s) => {
+                        {filteredStocks.map((s) => {
                           const isUp = s.changePercent >= 0;
                           return (
                             <motion.div
@@ -949,6 +1161,29 @@ export default function App() {
                             </div>
                           </div>
 
+                          {/* WHAT IS THIS COMPANY? — plain-language explanation for the kid */}
+                          <div className="bg-slate-50/70 border border-slate-200/70 rounded-[24px] p-6 space-y-2">
+                            <h4 className="font-extrabold text-slate-800 text-sm flex items-center gap-1.5">
+                              <Info className="w-4 h-4 text-indigo-500" />
+                              <span>{t('stocks.whatIsThis')}</span>
+                            </h4>
+                            <p className="text-sm font-semibold text-slate-600 leading-relaxed">
+                              {locale === 'he' && selectedStock.heDescription
+                                ? selectedStock.heDescription
+                                : selectedStock.description}
+                            </p>
+                            {locale === 'he' && selectedStock.childAnalogy && (
+                              <p className="text-xs font-bold text-indigo-600 leading-relaxed">
+                                💡 {selectedStock.childAnalogy}
+                              </p>
+                            )}
+                            {selectedStock.category && (
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 pt-1">
+                                {categoryLabel(selectedStock.category)}
+                              </p>
+                            )}
+                          </div>
+
                           {/* AI TUTOR WIDGET BUTTON - Sleek Styling */}
                           <div className="bg-emerald-50/50 border border-emerald-100 rounded-[24px] p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden shadow-sm">
                             <div className="absolute top-0 right-0 p-3 bg-emerald-500/10 text-emerald-500 font-bold text-7xl select-none pointer-events-none opacity-40">
@@ -976,14 +1211,11 @@ export default function App() {
                           <div className="space-y-3">
                             <h4 className="font-extrabold text-slate-700 text-xs uppercase tracking-wider">{t('stocks.dayValuationChart')}</h4>
                             <PerformanceChart
-                              data={Array.from({ length: 30 }).map((_, idx) => {
-                                const d = new Date();
-                                d.setDate(d.getDate() - (29 - idx));
-                                return {
-                                  date: d.toISOString().split('T')[0],
-                                  price: selectedStock.priceUsd * (1 + (Math.sin(idx / 3) * 0.08)),
-                                };
-                              })}
+                              data={
+                                stockHistory.length > 1
+                                  ? stockHistory
+                                  : [{ date: new Date().toISOString().split('T')[0], price: selectedStock.priceUsd }]
+                              }
                               color="emerald"
                             />
                           </div>
@@ -1347,11 +1579,15 @@ export default function App() {
                 ? `${t('pinPad.loginTitle')} ${targetProfileToLogin?.name || 'Vault'}`
                 : showPinPad === 'trade_buy'
                 ? t('pinPad.buyTitle')
+                : showPinPad === 'transfer'
+                ? t('pinPad.transferTitle')
                 : t('pinPad.sellTitle')
             }
             subtitle={
               showPinPad === 'login'
                 ? t('pinPad.enterPin')
+                : showPinPad === 'transfer'
+                ? `${t('pinPad.authorizing')} ${transferAmount} ₪ (${transferLockDays} ${t('pockets.days')})`
                 : `${t('pinPad.authorizing')} ${selectedStock?.ticker}`
             }
             onVerify={handlePinPadVerify}
@@ -1360,6 +1596,104 @@ export default function App() {
               setTargetProfileToLogin(null);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Pocket money → invest fund transfer (with a "promise" lock window) */}
+      <AnimatePresence>
+        {showTransfer && selectedProfile && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="bg-white rounded-[32px] p-8 max-w-lg w-full shadow-2xl space-y-5"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-extrabold text-slate-900">{t('pockets.transferTitle')}</h3>
+                  <p className="text-xs font-semibold text-slate-500 mt-1">{t('pockets.transferDesc')}</p>
+                </div>
+                <button
+                  onClick={() => setShowTransfer(false)}
+                  className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 flex justify-between items-center">
+                <span className="text-xs font-bold text-emerald-800">{t('dashboard.pocketMoney')}</span>
+                <span className="text-lg font-extrabold text-emerald-900">₪{(summary.pocketLocal ?? 0).toFixed(2)}</span>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase text-slate-500">{t('pockets.amount')}</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪</span>
+                  <input
+                    type="number"
+                    min={10}
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl font-extrabold text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  {[10, 20, 50].map((amt) => (
+                    <button
+                      key={amt}
+                      onClick={() => setTransferAmount(String(amt))}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-600 cursor-pointer"
+                    >
+                      ₪{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold uppercase text-slate-500">{t('pockets.promise')}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { days: 30, emoji: '🐣', label: t('pockets.lock30') },
+                    { days: 90, emoji: '🥉', label: t('pockets.lock90') },
+                    { days: 365, emoji: '🥇', label: t('pockets.lock365') },
+                  ].map((opt) => (
+                    <button
+                      key={opt.days}
+                      onClick={() => setTransferLockDays(opt.days)}
+                      className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                        transferLockDays === opt.days
+                          ? 'border-emerald-500 bg-emerald-50/70 shadow-sm'
+                          : 'border-slate-200 bg-slate-50/40 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="text-2xl">{opt.emoji}</div>
+                      <div className="text-[10px] font-extrabold text-slate-700 mt-1">{opt.label}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] font-semibold text-slate-500 leading-relaxed">{t('pockets.promiseNote')}</p>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowTransfer(false);
+                  setShowPinPad('transfer');
+                }}
+                disabled={!(parseFloat(transferAmount) >= 10)}
+                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-sm rounded-2xl shadow-md transition-all cursor-pointer"
+              >
+                {t('pockets.confirm')}
+              </button>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
