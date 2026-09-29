@@ -230,7 +230,7 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
   AMD: {
     ticker: "AMD",
     name: "AMD",
-    heName: "AMD",
+    heName: "AMD (מעבדים)",
     description: "AMD makes fast processors and graphics chips for computers and game consoles.",
     heDescription: "AMD מייצרת מעבדים ושבבים גרפיים חזקים למחשבים ולמשחקים — המתחרה של אנבידיה ואינטל.",
     childAnalogy: "כמו קבוצת מרוץ נוספת של שבבים — לפעמים מנצחת.",
@@ -241,7 +241,7 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
   TSM: {
     ticker: "TSM",
     name: "TSMC",
-    heName: "TSMC",
+    heName: "TSMC (יצרנית שבבים)",
     description: "The biggest chip factory in the world — it manufactures chips for Apple, NVIDIA and many more.",
     heDescription: "בית החרושת הגדול בעולם שמייצר שבבים בשביל אפל ואנבידיה — כולם צריכים אותה.",
     childAnalogy: "כמו האופה שמכין את הלחמניות לכל המסעדות בעיר.",
@@ -263,7 +263,7 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
   ASML: {
     ticker: "ASML",
     name: "ASML",
-    heName: "ASML",
+    heName: "ASML (מכונות לשבבים)",
     description: "ASML builds the most precise machines in the world — they print the tiny circuits on chips.",
     heDescription: "ASML בונה מכונות ענק שמכינות שבבים בדיוק מטורף — המדויקות בעולם.",
     childAnalogy: "כמו מכונת קסמים שמציירת מיליון קווים דקים על גרגר אורז.",
@@ -519,7 +519,7 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
 // Real closing prices measured 2026-09-28. Used only by the deterministic
 // simulator fallback (and as a sanity floor) when live data is unreachable.
 // ---------------------------------------------------------------------------
-const BASE_PRICES: Record<string, number> = {
+export const BASE_PRICES: Record<string, number> = {
   SPY: 767.27,
   QQQ: 738.27,
   VT: 159.16,
@@ -568,7 +568,7 @@ const BASE_PRICES: Record<string, number> = {
 
 // Tickers that Alpaca does not serve (OTC / pink sheets) — these fall back to
 // Yahoo Finance for their quote.
-const ALPACA_UNSUPPORTED = new Set(['NTDOY']);
+export const ALPACA_UNSUPPORTED_TICKERS = new Set(['NTDOY']);
 
 // Seed-based pseudo-random generator for stable daily fluctuations in the simulator
 function getDayVolatility(ticker: string, offsetDays: number = 0): number {
@@ -587,7 +587,7 @@ function getDayVolatility(ticker: string, offsetDays: number = 0): number {
   return -0.04 + rand * 0.085;
 }
 
-function simulatedQuote(ticker: string): StockQuote {
+export function simulatedQuote(ticker: string): StockQuote {
   const info = KIDS_STOCKS[ticker];
   const basePrice = BASE_PRICES[ticker] || 100.0;
   const fluc = getDayVolatility(ticker);
@@ -664,42 +664,100 @@ async function fetchYahooQuote(ticker: string): Promise<Partial<StockQuote> | nu
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     if (!res.ok) return null;
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    const quotes = result?.indicators?.quote?.[0];
-    const timestamps = result?.timestamp;
-    if (!result || !quotes || !timestamps || timestamps.length === 0) return null;
-
-    const lastIdx = timestamps.length - 1;
-    const price = num(quotes.close?.[lastIdx]);
-    if (price === null) return null;
-
-    let prevClose = price;
-    for (let i = timestamps.length - 2; i >= 0; i--) {
-      const c = num(quotes.close?.[i]);
-      if (c !== null) {
-        prevClose = c;
-        break;
-      }
-    }
-    const dayHigh = num(quotes.high?.[lastIdx]) ?? price;
-    const dayLow = num(quotes.low?.[lastIdx]) ?? price;
-
-    return {
-      priceUsd: Number(price.toFixed(2)),
-      prevClose: Number(prevClose.toFixed(2)),
-      high24h: Number(Math.max(dayHigh, price).toFixed(2)),
-      low24h: Number(Math.min(dayLow, price).toFixed(2)),
-      volume: num(quotes.volume?.[lastIdx]) ?? 0,
-      lastUpdated: new Date(timestamps[lastIdx] * 1000).toISOString(),
-    };
+    return quoteFromYahooChart(await res.json());
   } catch (err) {
     console.warn(`[MarketService] Yahoo quote failed for ${ticker}`, err);
     return null;
   }
 }
 
-function mergeQuote(ticker: string, live: Partial<StockQuote> | null): StockQuote {
+/**
+ * Pure mapping of one Alpaca snapshot entry → quote fields.
+ * Returns null when the snapshot carries no usable price.
+ */
+export function quoteFromAlpacaSnapshot(snap: any): Partial<StockQuote> | null {
+  const price = num(snap?.latestTrade?.p) ?? num(snap?.dailyBar?.c);
+  if (price === null) return null;
+  const prevClose = num(snap?.prevDailyBar?.c) ?? num(snap?.dailyBar?.o) ?? price;
+  return {
+    priceUsd: price,
+    prevClose,
+    high24h: num(snap?.dailyBar?.h) ?? price,
+    low24h: num(snap?.dailyBar?.l) ?? price,
+    volume: num(snap?.dailyBar?.v) ?? 0,
+    lastUpdated: snap?.latestTrade?.t ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Pure mapping of a Yahoo Finance chart response → quote fields (used for
+ * tickers Alpaca cannot serve, e.g. OTC ADRs like NTDOY).
+ */
+export function quoteFromYahooChart(data: any): Partial<StockQuote> | null {
+  const result = data?.chart?.result?.[0];
+  const quotes = result?.indicators?.quote?.[0];
+  const timestamps: number[] = result?.timestamp;
+  if (!result || !quotes || !timestamps || timestamps.length === 0) return null;
+
+  const lastIdx = timestamps.length - 1;
+  const price = num(quotes.close?.[lastIdx]);
+  if (price === null) return null;
+
+  let prevClose = price;
+  for (let i = timestamps.length - 2; i >= 0; i--) {
+    const c = num(quotes.close?.[i]);
+    if (c !== null) {
+      prevClose = c;
+      break;
+    }
+  }
+  const dayHigh = num(quotes.high?.[lastIdx]) ?? price;
+  const dayLow = num(quotes.low?.[lastIdx]) ?? price;
+
+  return {
+    priceUsd: Number(price.toFixed(2)),
+    prevClose: Number(prevClose.toFixed(2)),
+    high24h: Number(Math.max(dayHigh, price).toFixed(2)),
+    low24h: Number(Math.min(dayLow, price).toFixed(2)),
+    volume: num(quotes.volume?.[lastIdx]) ?? 0,
+    lastUpdated: new Date(timestamps[lastIdx] * 1000).toISOString(),
+  };
+}
+
+/** Pure mapping of a Yahoo chart response → daily closes for the price chart. */
+export function historyFromYahooChart(data: any): { date: string; price: number }[] {
+  const result = data?.chart?.result?.[0];
+  const timestamps: number[] = result?.timestamp || [];
+  const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || [];
+  return timestamps
+    .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], price: closes[i] }))
+    .filter((p) => typeof p.price === 'number' && Number.isFinite(p.price))
+    .map((p) => ({ date: p.date, price: Number((p.price as number).toFixed(2)) }));
+}
+
+/** Deterministic simulated price curve — the last-resort fallback for charts. */
+export function simulatedHistory(
+  ticker: string,
+  range: '1D' | '1W' | '1M' | '1Y' = '1M'
+): { date: string; price: number }[] {
+  const basePrice = BASE_PRICES[ticker] || 100.0;
+  let days = 30;
+  if (range === '1D') days = 1;
+  if (range === '1W') days = 7;
+  if (range === '1Y') days = 365;
+
+  const out: { date: string; price: number }[] = [];
+  let currentPrice = basePrice;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    currentPrice = currentPrice * (1 + getDayVolatility(ticker, i) * 0.4);
+    out.push({ date: d.toISOString().split('T')[0], price: Number(currentPrice.toFixed(2)) });
+  }
+  return out;
+}
+
+export function mergeQuote(ticker: string, live: Partial<StockQuote> | null): StockQuote {
   const info = KIDS_STOCKS[ticker];
   const fallback = simulatedQuote(ticker);
   const price = live?.priceUsd ?? fallback.priceUsd;
@@ -737,22 +795,11 @@ async function refreshQuotes(): Promise<Record<string, StockQuote>> {
     let live: Partial<StockQuote> | null = null;
 
     if (snap) {
-      const price = num(snap.latestTrade?.p) ?? num(snap.dailyBar?.c);
-      if (price !== null) {
-        const prevClose = num(snap.prevDailyBar?.c) ?? num(snap.dailyBar?.o) ?? price;
-        live = {
-          priceUsd: price,
-          prevClose,
-          high24h: num(snap.dailyBar?.h) ?? price,
-          low24h: num(snap.dailyBar?.l) ?? price,
-          volume: num(snap.dailyBar?.v) ?? 0,
-          lastUpdated: snap.latestTrade?.t ?? new Date().toISOString(),
-        };
-      }
+      live = quoteFromAlpacaSnapshot(snap);
     }
 
     // Tickers Alpaca cannot serve (or a missing batch entry) go to Yahoo.
-    if (!live && ALPACA_UNSUPPORTED.has(ticker)) {
+    if (!live && ALPACA_UNSUPPORTED_TICKERS.has(ticker)) {
       live = await fetchYahooQuote(ticker);
     }
 
@@ -838,35 +885,14 @@ export const MarketService = {
         { headers: { 'User-Agent': 'Mozilla/5.0' } }
       );
       if (res.ok) {
-        const data = await res.json();
-        const result = data?.chart?.result?.[0];
-        const timestamps: number[] = result?.timestamp || [];
-        const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || [];
-        const history = timestamps
-          .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], price: closes[i] }))
-          .filter((p) => typeof p.price === 'number' && Number.isFinite(p.price))
-          .map((p) => ({ date: p.date, price: Number((p.price as number).toFixed(2)) }));
+        const history = historyFromYahooChart(await res.json());
         if (history.length >= 2) return history;
       }
     } catch (err) {
       console.warn(`[MarketService] Yahoo history failed for ${ticker}`, err);
     }
 
-    // Simulator curve fallback
-    const basePrice = BASE_PRICES[ticker] || 100.0;
-    let days = 30;
-    if (range === '1D') days = 1;
-    if (range === '1W') days = 7;
-    if (range === '1Y') days = 365;
-    const out: { date: string; price: number }[] = [];
-    let currentPrice = basePrice;
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      currentPrice = currentPrice * (1 + getDayVolatility(ticker, i) * 0.4);
-      out.push({ date: d.toISOString().split('T')[0], price: Number(currentPrice.toFixed(2)) });
-    }
-    return out;
+    return simulatedHistory(ticker, range);
   },
 };
 
