@@ -416,17 +416,19 @@ export default function App() {
   const profileAge = selectedProfile ? (new Date().getFullYear() - selectedProfile.birthYear) : 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased flex flex-col pb-12">
-      {/* Top Navigation Bar in Sleek Interface theme */}
-      <nav className="h-16 bg-white border-b border-slate-200 px-8 flex items-center justify-between shadow-sm z-10">
-        <div className="flex items-center gap-3">
+    <div className="app-bottom-space min-h-screen bg-slate-50 text-slate-900 font-sans antialiased flex flex-col">
+      {/* Top Navigation Bar in Sleek Interface theme.
+          `safe-top` keeps it clear of the iPhone notch / status bar. */}
+      <nav className="safe-top safe-x bg-white border-b border-slate-200 shadow-sm z-10">
+        <div className="h-16 px-4 sm:px-8 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-200">
             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </div>
           <div>
-            <span className="text-lg font-extrabold tracking-tight text-slate-800 uppercase">Firefly Junior</span>
+            <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-800 uppercase">Firefly Junior</span>
             <span className="hidden sm:inline text-[10px] text-slate-400 font-bold tracking-widest uppercase ml-2 border-l pl-2 border-slate-200" dir="ltr">{t('nav.brokeragePanel')}</span>
           </div>
         </div>
@@ -465,7 +467,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="text-rose-500 hover:text-rose-600 font-extrabold text-xs ml-2 tracking-wider hover:underline transition-all cursor-pointer"
+                  className="shrink-0 px-3 py-2 min-h-[40px] flex items-center rounded-xl bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 active:scale-95 font-extrabold text-xs tracking-wider transition-all cursor-pointer"
                 >
                   {t('nav.logout')}
                 </button>
@@ -476,6 +478,7 @@ export default function App() {
               {t('nav.securedGateway')}
             </div>
           )}
+          </div>
         </div>
       </nav>
 
