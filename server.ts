@@ -10,6 +10,14 @@ import { createServer as createViteServer } from 'vite';
 import { Database } from './src/server/db.js';
 import { MarketService, STOCK_CATEGORIES } from './src/server/alpaca.js';
 import { LedgerService } from './src/server/firefly.js';
+import {
+  planBuy,
+  planLiquidation,
+  validateTransfer,
+  summarizePockets,
+  localDateString,
+  MIN_ORDER_LOCAL,
+} from './src/server/rules.js';
 import { AIService } from './src/server/ai.js';
 import { TradeRequest, TradeResponse } from './src/types.js';
 
@@ -184,12 +192,13 @@ async function startServer() {
       const portfolioTotalUsd = cashValueUsd + totalStockValueUsd; // invested world: fund + stocks
       const portfolioTotalLocal = profile.currencyMode === 'PARITY' ? portfolioTotalUsd : (portfolioTotalUsd / fxFactor);
 
-      // ---- The three pockets -------------------------------------------------
-      const pocketLocal = Number((financials?.accounts.checking?.balance ?? 0).toFixed(2));
-      const investFundLocal = Number(rawCashBalance.toFixed(2));
-      const stocksLocal = Number((totalStockValueUsd / fxFactor).toFixed(2));
-      const investedWorldLocal = Number((investFundLocal + stocksLocal).toFixed(2));
-      const totalMoneyLocal = Number((pocketLocal + investedWorldLocal).toFixed(2));
+      // ---- The three pockets (see src/server/rules.ts) -----------------------
+      const pockets = summarizePockets({
+        pocketLocal: financials?.accounts.checking?.balance ?? 0,
+        investFundLocal: rawCashBalance,
+        stocksLocal: totalStockValueUsd / fxFactor,
+      });
+      const { pocketLocal, investFundLocal, stocksLocal, investedWorldLocal, totalMoneyLocal } = pockets;
 
       // ---- Baselines: money that came in from OUTSIDE ------------------------
       // Allowance / work income / pocket-money transfers raise the baseline, so
@@ -337,11 +346,11 @@ async function startServer() {
       if (type === 'BUY') {
         const investFiat = amount;
 
-        // 1. Guardrail: Minimum Order Size
-        if (investFiat < 10.0) {
+        // 1. Guardrail: Minimum Order Size (see src/server/rules.ts)
+        if (investFiat < MIN_ORDER_LOCAL) {
           return res.status(400).json({
             success: false,
-            error: `Minimum order size is exactly 10 currency units! (You tried to buy with ${investFiat})`,
+            error: `Minimum order size is exactly ${MIN_ORDER_LOCAL} currency units! (You tried to buy with ${investFiat})`,
           });
         }
 
@@ -355,17 +364,23 @@ async function startServer() {
           });
         }
 
-        // Compute shares to acquire
-        const investUsd = profile.currencyMode === 'PARITY' ? investFiat : (investFiat * fxFactor);
-        const sharesToAcquire = investUsd / quote.priceUsd;
-
-        // 2. Guardrail: Minimum Slice Resolution
-        if (sharesToAcquire < 0.01) {
-          return res.status(400).json({
-            success: false,
-            error: `Trade results in a fraction below the 0.01 share boundary (${sharesToAcquire.toFixed(4)} shares). Visual blockade triggered! Try investing a larger amount.`,
-          });
+        // 2. Compute the trade with the shared, unit-tested rules
+        const existingHolding = Database.getHoldings(profileName).find(
+          (h) => h.ticker.toUpperCase() === ticker.toUpperCase()
+        );
+        const buyPlan = planBuy({
+          profileName,
+          ticker,
+          amountLocal: investFiat,
+          priceUsd: quote.priceUsd,
+          currencyMode: profile.currencyMode,
+          fxRate,
+          existingHolding,
+        });
+        if (!buyPlan.ok) {
+          return res.status(400).json({ success: false, error: buyPlan.error });
         }
+        const { shares: sharesToAcquire, holding: newHolding } = buyPlan.value;
 
         // Ledger Transfer: savings to investments
         const ffTxId = await LedgerService.createTransfer(
@@ -374,34 +389,6 @@ async function startServer() {
           profile.savingsAccountId,
           profile.investmentAccountId
         );
-
-        // Update local holdings
-        const holdings = Database.getHoldings(profileName);
-        const currentHolding = holdings.find((h) => h.ticker.toUpperCase() === ticker.toUpperCase());
-
-        let newHolding;
-        if (currentHolding) {
-          const totalShares = currentHolding.shares + sharesToAcquire;
-          const totalPrincipal = currentHolding.originalPrincipalUsd + investUsd;
-          const avgPrice = totalPrincipal / totalShares;
-          newHolding = {
-            profileName,
-            ticker,
-            shares: Number(totalShares.toFixed(4)),
-            averagePriceUsd: Number(avgPrice.toFixed(2)),
-            originalPrincipalUsd: Number(totalPrincipal.toFixed(2)),
-            lastUpdated: new Date().toISOString(),
-          };
-        } else {
-          newHolding = {
-            profileName,
-            ticker,
-            shares: Number(sharesToAcquire.toFixed(4)),
-            averagePriceUsd: quote.priceUsd,
-            originalPrincipalUsd: Number(investUsd.toFixed(2)),
-            lastUpdated: new Date().toISOString(),
-          };
-        }
 
         Database.saveHolding(newHolding);
 
@@ -440,12 +427,21 @@ async function startServer() {
         // Amount represents either percentage (0-100) or shares to sell
         // We will default to liquidating ALL shares (100%) for child simplicity, or supporting custom percentages
         const pctToLiquidate = amount; // e.g. 100 means full liquidation
-        if (pctToLiquidate < 1 || pctToLiquidate > 100) {
-          return res.status(400).json({ success: false, error: 'Liquidating percentage must be between 1 and 100.' });
+
+        // All arithmetic + validation lives in src/server/rules.ts
+        const liquidationPlan = planLiquidation({
+          percentage: pctToLiquidate,
+          holding: currentHolding,
+          priceUsd: quote.priceUsd,
+          currencyMode: profile.currencyMode,
+          fxRate,
+        });
+        if (!liquidationPlan.ok) {
+          return res.status(400).json({ success: false, error: liquidationPlan.error });
         }
 
-        const sharesToSell = (pctToLiquidate / 100) * currentHolding.shares;
-        const originalPrincipalUsd = (pctToLiquidate / 100) * currentHolding.originalPrincipalUsd;
+        const sharesToSell = liquidationPlan.value.sharesToSell;
+        const originalPrincipalUsd = liquidationPlan.value.principalUsd;
 
         // Execute Double-Entry Ledger through Dad's clearance
         const clearance = await LedgerService.executeLiquidationDoubleEntry({
@@ -516,8 +512,7 @@ async function startServer() {
     try {
       // Local date (not UTC): the nightly cron runs at 23:50 local, and a UTC
       // stamp would file "tonight" under tomorrow/yesterday depending on the zone.
-      const now = new Date();
-      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const dateStr = localDateString();
       const profiles = Database.getProfiles();
       const fxRate = await MarketService.getILSExchangeRate();
 
@@ -587,27 +582,22 @@ async function startServer() {
         return res.status(401).json({ success: false, error: 'Incorrect 4-digit PIN! Authorization failed.' });
       }
 
-      const amountLocal = Number(amount);
-      if (!Number.isFinite(amountLocal) || amountLocal < 10) {
-        return res.status(400).json({
-          success: false,
-          error: 'Minimum transfer is ₪/$$ 10 — the same as the minimum stock purchase.',
-        });
-      }
-      const days = [30, 90, 365].includes(Number(lockDays)) ? Number(lockDays) : 90;
-
       const financials = await LedgerService.getFinancialBreakdown(profile);
       const pocketBalance = financials?.accounts.checking?.balance ?? 0;
-      const keepInPocket = 10; // never empty the pocket completely
-      if (amountLocal > pocketBalance - keepInPocket) {
-        return res.status(400).json({
-          success: false,
-          error: `Not enough pocket money. You have ₪/$$ ${pocketBalance.toFixed(2)} and we always keep ₪/$$ ${keepInPocket.toFixed(2)} in your pocket.`,
-        });
+
+      // All transfer rules live in src/server/rules.ts
+      const transferPlan = validateTransfer({
+        amountLocal: Number(amount),
+        pocketBalanceLocal: pocketBalance,
+        lockDays: Number(lockDays),
+      });
+      if (!transferPlan.ok) {
+        return res.status(400).json({ success: false, error: transferPlan.error });
       }
+      const { amountLocal: transferAmountLocal, days, lockedUntil } = transferPlan.value;
 
       const ffId = await LedgerService.createTransfer(
-        amountLocal,
+        transferAmountLocal,
         `Pocket money → invest fund (promised to keep ${days} days)`,
         profile.spendingAccountId,
         profile.savingsAccountId
@@ -615,9 +605,9 @@ async function startServer() {
 
       const transfer = Database.addTransfer({
         profileName: profile.name,
-        amountLocal: Number(amountLocal.toFixed(2)),
+        amountLocal: transferAmountLocal,
         lockDays: days,
-        lockedUntil: new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString(),
+        lockedUntil,
         createdAt: new Date().toISOString(),
         fireflyTransactionId: ffId,
       });
@@ -626,7 +616,7 @@ async function startServer() {
 
       return res.json({
         success: true,
-        message: `Awesome! You moved ₪/$$ ${amountLocal.toFixed(2)} from your pocket into your invest fund — and you promised not to touch it for ${days} days. 💪`,
+        message: `Awesome! You moved ₪/$$ ${transferAmountLocal.toFixed(2)} from your pocket into your invest fund — and you promised not to touch it for ${days} days. 💪`,
         transfer,
       });
     } catch (err: any) {

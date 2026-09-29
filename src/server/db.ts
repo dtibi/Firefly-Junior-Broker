@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { Profile, Holding, Transaction, PortfolioSnapshot, TransferRecord } from '../types.js';
+import { migrateSchema } from './migrate.js';
 
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_FILE = path.join(DB_DIR, 'db.json');
@@ -163,56 +164,15 @@ function initDb(): Schema {
   try {
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
     const parsed = JSON.parse(raw);
-    let modified = false;
 
-    // Migrate profiles to have cumulativeDeposits property
-    if (parsed.profiles) {
-      parsed.profiles.forEach((p: any) => {
-        if (p.cumulativeDeposits === undefined) {
-          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
-          p.cumulativeDeposits = isRoniLike ? 1000.0 : 500.0;
-          modified = true;
-        }
-        // Spending (pocket money) account + transfer enablement
-        if (p.spendingAccountId === undefined) {
-          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
-          p.spendingAccountId = isRoniLike ? '7' : '4';
-          modified = true;
-        }
-        if (p.transfersEnabled === undefined) {
-          const isRoniLike = p.name === 'רוני' || p.name.toLowerCase() === 'mia' || p.name.toLowerCase() === 'roni';
-          // Roni is 6 — pocket-money → invest-fund transfers stay off until she learns the invest account.
-          p.transfersEnabled = !isRoniLike;
-          modified = true;
-        }
-      });
-    }
-
-    // Migrate transfers store
-    if (!Array.isArray(parsed.transfers)) {
-      parsed.transfers = [];
-      modified = true;
-    }
-
-    // Migrate snapshots to have cumulativeDeposits properties
-    if (parsed.snapshots) {
-      parsed.snapshots.forEach((s: any) => {
-        if (s.cumulativeDepositsUsd === undefined) {
-          const isRoniLike = s.profileName === 'רוני' || s.profileName.toLowerCase() === 'mia' || s.profileName.toLowerCase() === 'roni';
-          const rate = isRoniLike ? 1.0 : 1.0;
-          s.cumulativeDepositsUsd = isRoniLike ? 1000.0 : 500.0;
-          s.cumulativeDepositsLocal = s.cumulativeDepositsUsd * rate;
-          s.totalValueLocal = s.totalValueUsd * rate;
-          modified = true;
-        }
-      });
-    }
+    // Legacy shapes are upgraded by the pure migrator (src/server/migrate.ts)
+    const { schema, modified } = migrateSchema(parsed);
 
     if (modified) {
-      fs.writeFileSync(DB_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+      fs.writeFileSync(DB_FILE, JSON.stringify(schema, null, 2), 'utf-8');
     }
 
-    return parsed;
+    return schema as Schema;
   } catch (err) {
     console.error('Error reading DB, resetting to defaults:', err);
     fs.writeFileSync(DB_FILE, JSON.stringify(defaultSchema, null, 2), 'utf-8');

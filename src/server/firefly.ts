@@ -3,6 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { classifyKidLedger, cumulativeThrough } from './ledger-rules.js';
+import { planLiquidation } from './rules.js';
+
 interface FireflyTxPayload {
   type: 'transfer' | 'deposit' | 'withdrawal';
   date: string;
@@ -207,30 +210,39 @@ export const LedgerService = {
       fxRate,
     } = params;
 
-    // Calculate current liquidation value in USD
-    const currentTotalUsd = shares * currentPriceUsd;
-    const deltaUsd = currentTotalUsd - originalPrincipalUsd;
-    const isGain = deltaUsd >= 0;
+    // All the arithmetic lives in src/server/rules.ts (single source of truth,
+    // unit-tested) — this method only talks to Firefly III.
+    const plan = planLiquidation({
+      percentage: 100,
+      holding: {
+        profileName: '',
+        ticker,
+        shares,
+        averagePriceUsd: shares > 0 ? originalPrincipalUsd / shares : 0,
+        originalPrincipalUsd,
+        lastUpdated: new Date().toISOString(),
+      },
+      priceUsd: currentPriceUsd,
+      currencyMode,
+      fxRate,
+    });
+    if (!plan.ok) {
+      throw new Error(`[LedgerSync] ${plan.error}`);
+    }
 
-    // Convert values to child's currency mode if REAL, or keep as 1.0 if PARITY
-    const multiplier = currencyMode === 'PARITY' ? 1.0 : (1.0 / fxRate); // Wait, if the allowance is in Shekels (ILS) and currency_mode is REAL, we convert Allowance Shekels (ILS) to USD when buying.
-    // Buying: originalPrincipalUsd = (fiatAmount * fxRate) -> wait, if currency_mode is REAL:
-    // "fiatAmount" in Shekels (ILS) converts to USD at FX rate. So USD amount = fiatAmount * fxRate (where fxRate is around 0.27, so 100 ILS * 0.27 = 27 USD).
-    // Selling:
-    // Principal back to savings: originalPrincipalUsd / fxRate = originalPrincipalIls.
-    // Profit back to savings: deltaUsd / fxRate = deltaIls (from Bank of Dad).
-    // Loss out of savings: lossUsd / fxRate = lossIls (from Investment Account to Bank of Dad).
-    // Let's compute everything in Child's Currency (fiat)!
-    const fxFactor = currencyMode === 'PARITY' ? 1.0 : fxRate; // fxRate is ILS -> USD (e.g. 0.27). So USD / fxRate = ILS.
-    
-    const principalFiat = currencyMode === 'PARITY' ? originalPrincipalUsd : (originalPrincipalUsd / fxFactor);
-    const deltaFiat = currencyMode === 'PARITY' ? Math.abs(deltaUsd) : (Math.abs(deltaUsd) / fxFactor);
-    const currentTotalFiat = currencyMode === 'PARITY' ? currentTotalUsd : (currentTotalUsd / fxFactor);
+    const {
+      isGain,
+      sharesToSell,
+      principalLocal: principalFiat,
+      currentValueLocal: currentTotalFiat,
+      deltaLocal,
+      fundReturnLocal: returnAmount,
+    } = plan.value;
+    const deltaFiat = Math.abs(deltaLocal);
 
-    console.log(`[LedgerSync] Liquidation details for ${ticker}:
-      - Principal invested: $${originalPrincipalUsd.toFixed(2)} USD (${principalFiat.toFixed(2)} Fiat)
-      - Current value: $${currentTotalUsd.toFixed(2)} USD (${currentTotalFiat.toFixed(2)} Fiat)
-      - Delta (Profit/Loss): $${deltaUsd.toFixed(2)} USD (${(isGain ? '+' : '-')}${deltaFiat.toFixed(2)} Fiat)`);
+    console.log(`[LedgerSync] Liquidation details for ${ticker}: `
+      + `principal ${principalFiat.toFixed(2)} / value ${currentTotalFiat.toFixed(2)} / `
+      + `delta ${isGain ? '+' : '-'}${deltaFiat.toFixed(2)} (${sharesToSell} shares)`);
 
     const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '99';
 
@@ -238,7 +250,6 @@ export const LedgerService = {
     // For gains: return the original principal (profit comes from Dad in Action B).
     // For losses: return only the current value (the difference is the loss sent to Dad in Action C).
     // This keeps the investment account balance at net zero after both actions.
-    const returnAmount = isGain ? principalFiat : currentTotalFiat;
     const principalTransferId = await this.createTransfer(
       returnAmount,
       `Liquidation Principal Return: Sell ${shares.toFixed(4)} shares of ${ticker}`,
@@ -344,78 +355,31 @@ export const LedgerService = {
     if (!savings && !investment) return null;
 
     const dadId = process.env.BANK_OF_DAD_ACCOUNT_ID || '25';
-    const ownIds = new Set(
-      [checking?.id, savings?.id, investment?.id].filter(Boolean) as string[]
-    );
-    const fundIds = new Set(
-      [savings?.id, investment?.id].filter(Boolean) as string[]
-    );
 
-    let externalDepositsLocal = 0;
-    let investedFromOutsideLocal = 0;
-    let realizedPnlLocal = 0;
-    const externalFlows: ExternalFlow[] = [];
-    const investedFlows: ExternalFlow[] = [];
-
+    // Gather every journal that touches one of the kid's accounts, then let the
+    // pure rules module do the classification (see src/server/ledger-rules.ts).
+    const journals: any[] = [];
     for (const account of [checking, savings, investment]) {
-      if (!account || !account.openingBalance) continue;
-      externalDepositsLocal += account.openingBalance;
-      externalFlows.push({
-        date: (account.openingDate || '').slice(0, 10),
-        amount: account.openingBalance,
-        description: `יתרת פתיחה — ${account.name}`,
-      });
+      if (!account) continue;
+      journals.push(...(await this.getAccountJournals(account.id)));
     }
 
-    const seenJournals = new Set<string>();
-    for (const accountId of ownIds) {
-      const journals = await this.getAccountJournals(accountId);
-      for (const journal of journals) {
-        const journalId = String(journal.id);
-        if (seenJournals.has(journalId)) continue;
-        seenJournals.add(journalId);
-
-        for (const t of journal.attributes?.transactions || []) {
-          // Firefly mirrors each account's opening balance as a special
-          // "opening balance" transaction — we add those explicitly below,
-          // so counting them here too would double the baseline.
-          if (t.type === 'opening balance') continue;
-
-          const src = String(t.source_id ?? '');
-          const dst = String(t.destination_id ?? '');
-          const amount = Number(t.amount || 0);
-
-          // Bank-of-Dad flows are the trading profit/loss itself — never a deposit.
-          if (src === dadId || dst === dadId) {
-            if (dst === dadId) realizedPnlLocal -= amount;
-            else realizedPnlLocal += amount;
-            continue;
-          }
-
-          const date = String(t.date || '').slice(0, 10);
-          const description = t.description || '';
-          const srcOwn = ownIds.has(src);
-          const dstOwn = ownIds.has(dst);
-
-          // 1) Whole-kid boundary: allowance in, spending out, family transfers.
-          if (srcOwn !== dstOwn) {
-            const delta = dstOwn ? amount : -amount;
-            externalDepositsLocal += delta;
-            externalFlows.push({ date, amount: delta, description });
-          }
-
-          // 2) Invested-world boundary: pocket money is "outside" the fund, so a
-          //    pocket → fund transfer raises the baseline instead of faking profit.
-          const srcFund = fundIds.has(src);
-          const dstFund = fundIds.has(dst);
-          if (srcFund !== dstFund) {
-            const fundDelta = dstFund ? amount : -amount;
-            investedFromOutsideLocal += fundDelta;
-            investedFlows.push({ date, amount: fundDelta, description });
-          }
-        }
-      }
-    }
+    const classification = classifyKidLedger(journals, {
+      own: [checking, savings, investment]
+        .filter(Boolean)
+        .map((account) => {
+          const acc = account as FireflyAccount;
+          return {
+            id: acc.id,
+            name: acc.name,
+            type: acc.type,
+            openingBalance: acc.openingBalance,
+            openingDate: acc.openingDate,
+          };
+        }),
+      fundIds: [savings?.id, investment?.id].filter(Boolean) as string[],
+      dadAccountId: dadId,
+    });
 
     const result: KidFinancials = {
       accounts: {
@@ -423,11 +387,11 @@ export const LedgerService = {
         savings: savings ? { id: savings.id, name: savings.name, balance: savings.balance } : null,
         investment: investment ? { id: investment.id, name: investment.name, balance: investment.balance } : null,
       },
-      externalDepositsLocal: Number(externalDepositsLocal.toFixed(2)),
-      investedFromOutsideLocal: Number(investedFromOutsideLocal.toFixed(2)),
-      realizedPnlLocal: Number(realizedPnlLocal.toFixed(2)),
-      externalFlows: externalFlows.sort((a, b) => a.date.localeCompare(b.date)),
-      investedFlows: investedFlows.sort((a, b) => a.date.localeCompare(b.date)),
+      externalDepositsLocal: classification.externalDepositsLocal,
+      investedFromOutsideLocal: classification.investedFromOutsideLocal,
+      realizedPnlLocal: classification.realizedPnlLocal,
+      externalFlows: classification.externalFlows,
+      investedFlows: classification.investedFlows,
       fetchedAt: new Date().toISOString(),
     };
 
@@ -444,10 +408,7 @@ export const LedgerService = {
   async getInvestedBaselineAsOf(profileName: string, date: string): Promise<number | null> {
     const cached = breakdownCache.get(profileName);
     if (!cached) return null;
-    const sum = cached.investedFlows
-      .filter((f) => f.date <= date)
-      .reduce((total, f) => total + f.amount, 0);
-    return Number(sum.toFixed(2));
+    return cumulativeThrough(cached.investedFlows, date);
   },
 
   /** Drops the cached breakdown after any ledger change. */
