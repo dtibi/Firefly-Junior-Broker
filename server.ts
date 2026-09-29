@@ -514,7 +514,10 @@ async function startServer() {
   // 11. Force Valuation snapshots worker (Nightly / Daily schedule trigger)
   app.post('/api/cron/snapshots', async (req, res) => {
     try {
-      const dateStr = new Date().toISOString().split('T')[0];
+      // Local date (not UTC): the nightly cron runs at 23:50 local, and a UTC
+      // stamp would file "tonight" under tomorrow/yesterday depending on the zone.
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const profiles = Database.getProfiles();
       const fxRate = await MarketService.getILSExchangeRate();
 
