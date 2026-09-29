@@ -16,8 +16,35 @@ npm run dev              # Start dev server (tsx server.ts) on port 3000
 npm run build            # Production build: vite build + esbuild bundle server to dist/server.cjs
 npm run start            # Run production server (node dist/server.cjs)
 npm run lint             # Type-check only (tsc --noEmit)
+npm test                 # Unit tests (node:test via tsx) — no server/network needed
+npm run verify:guardrails # Live guardrail checks against a running server
 npm run clean            # Remove dist/ and data/ directories
 ```
+
+### Testing
+
+Money math lives in **pure, I/O-free modules** so it can be tested without Firefly III, the
+network or a running server. Change a rule → change/extend the test in the same commit.
+
+| Module | Tests | What must never regress |
+|--------|-------|-------------------------|
+| `src/server/ledger-rules.ts` | `test/ledger-rules.test.ts` | Allowances are never reported as profit; opening balances counted once; Bank-of-Dad flows are the P&L, not deposits; `profit = invested wealth − baseline = realized + unrealized`; `cumulativeThrough()` boundaries |
+| `src/server/rules.ts` | `test/trade-rules.test.ts`, `test/transfer-rules.test.ts` | Minimum order ₪10, 0.01-share slice floor, weighted-average merge, the three-legged liquidation (gain: principal `invest→fund` + profit `Dad→fund`; loss: value `invest→fund` + loss `invest→Dad`; break-even → no adjustment), keep ₪10 in the pocket, lock windows 30/90/365 |
+| `src/server/migrate.ts` | `test/migrations.test.ts` | Old `data/db.json` shapes keep working; migrations are idempotent and never overwrite existing values |
+| `src/server/alpaca.ts` | `test/stock-catalog.test.ts` | All 44 tickers have a Hebrew name + description and a valid category; Alpaca/Yahoo payload parsing; simulator determinism |
+
+Two rules for the live checker `scripts/verify-guardrails.ts`:
+
+1. **Never send a request to `/api/trade` or the transfer endpoint without a pre-flight proof.**
+   The script pushes each candidate request through the same rules the server uses, with the
+   same live price, and refuses to send it unless those rules say it cannot execute. Reason: a
+   ₪10 SPY order looked obviously invalid but is a legal 0.0131-share trade — it executed for
+   real and had to be rolled back (Firefly journal + `data/db.json` holding/transaction/cash).
+2. The PIN is matched in memory from the stored hash inside the script and never printed.
+
+**tsconfig gotcha:** the project does **not** enable `strict`/`strictNullChecks`, so TypeScript
+cannot narrow discriminated unions (`if (!result.ok)` does not narrow). `RuleResult<T>` in
+`rules.ts` therefore uses optional `value`/`error` fields and callers must check `ok` first.
 
 ## Architecture
 
@@ -44,7 +71,13 @@ Express server on port 3000. In dev, it mounts Vite as middleware for HMR; in pr
 
 ### Backend services (`src/server/`)
 
-- **`db.ts`** — File-based JSON database (`data/db.json`). Stores profiles (including `spendingAccountId` and `transfersEnabled`), holdings, transactions, pocket-money `transfers` (with lock windows), cash balances, portfolio snapshots, and FX rate cache. SHA-256 hashes PINs. Self-initializes with two demo profiles (Leo, PARITY mode; Mia, REAL mode) and sample holdings/transactions/snapshots. Includes migration logic for adding new fields to existing DB files.
+- **`db.ts`** — File-based JSON database (`data/db.json`). Stores profiles (including `spendingAccountId` and `transfersEnabled`), holdings, transactions, pocket-money `transfers` (with lock windows), cash balances, portfolio snapshots, and FX rate cache. SHA-256 hashes PINs. Self-initializes with two demo profiles (Leo, PARITY mode; Mia, REAL mode) and sample holdings/transactions/snapshots. Delegates the upgrade of legacy file shapes to `migrate.ts`.
+
+- **`migrate.ts`** — Pure `migrateSchema(parsed)` → `{ schema, modified }`. Adds missing profile fields (`cumulativeDeposits`, `spendingAccountId`, `transfersEnabled`), the `transfers` store and the snapshot baseline fields. Idempotent, never overwrites values that exist, and unit-tested with fixtures instead of the live file.
+
+- **`ledger-rules.ts`** — Pure ledger classification (`classifyKidLedger`, `cumulativeThrough`, `investedProfit`), no network/DB. `firefly.ts` feeds it Firefly journals and gets back the two baselines, the realized P&L and the dated flow lists. This is the single place where the accounting rules live, so they can be unit-tested.
+
+- **`rules.ts`** — Pure trade/transfer rules and the guardrail constants: `MIN_ORDER_LOCAL`, `MIN_SHARE_FRACTION`, `KEEP_IN_POCKET_LOCAL`, `ALLOWED_LOCK_DAYS`, `DEFAULT_LOCK_DAYS`; `planBuy()`, `planLiquidation()`, `planLiquidationTransfers()`, `validateTransfer()`, `summarizePockets()`, `localDateString()`. `server.ts` and `firefly.ts` call these instead of doing arithmetic inline.
 
 - **`alpaca.ts`** (`MarketService`) — Stock market data for a 44-ticker kid-friendly catalogue (39 companies + 5 baskets) defined in `KIDS_STOCKS`, grouped into 9 categories (`STOCK_CATEGORIES`) and documented with Hebrew descriptions (`heDescription`) + playground analogies (`childAnalogy`). Quotes come from **one batched Alpaca call** for the whole catalogue (`/v2/stocks/snapshots?symbols=...`), cached in memory for 5 minutes; tickers Alpaca cannot serve (OTC, e.g. NTDOY) fall back to Yahoo Finance, and a deterministic seed-based simulator keyed on ticker+date is the last resort. `getStockHistory()` returns real daily closes from Yahoo with a simulator curve as fallback. Fetches ILS→USD FX rates from `open.er-api.com` with 1-hour caching. (Alpha Vantage was removed from the code path — it was limited to 25 requests/day and practically never reached.)
 

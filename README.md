@@ -147,9 +147,20 @@ real deposit history (safe to re-run after changing account structure).
 │   │   └── useTranslation.ts  # Hook
 │   └── server/
 │       ├── db.ts          # JSON database
+│       ├── migrate.ts     # Pure schema migrations (unit-tested)
+│       ├── ledger-rules.ts # Pure ledger classification (no I/O) — the accounting brain
+│       ├── rules.ts       # Pure trade/transfer rules — the guardrails + arithmetic
 │       ├── alpaca.ts      # Market data service
 │       ├── firefly.ts     # Firefly III integration
 │       └── ai.ts          # Gemini AI service
+├── test/                  # Unit tests (node:test, run with tsx)
+│   ├── ledger-rules.test.ts
+│   ├── trade-rules.test.ts
+│   ├── transfer-rules.test.ts
+│   ├── stock-catalog.test.ts
+│   └── migrations.test.ts
+├── scripts/
+│   └── verify-guardrails.ts  # Live guardrail checks against a running server
 ├── data/
 │   └── db.json            # Runtime database (auto-created, gitignored)
 └── CLAUDE.md              # Developer reference
@@ -163,8 +174,31 @@ npm run dev          # Development server on :3000
 npm run build        # Production build
 npm run start        # Run production build
 npm run lint         # Type-check (tsc --noEmit)
+npm test             # Unit tests (60 tests, no network / no database needed)
+npm run verify:guardrails  # Live checks: invalid trades must be refused (server must be up)
 npm run clean        # Remove dist/ and data/
 ```
+
+### Testing before you change something
+
+The money math lives in **pure, I/O-free modules** so it can be tested without a server,
+a Firefly instance or the network:
+
+- `src/server/ledger-rules.ts` — reads Firefly journals into baselines / realized P&L
+- `src/server/rules.ts` — buy, liquidation and pocket→fund transfer rules
+- `src/server/migrate.ts` — old `data/db.json` shapes
+
+`npm test` pins down the rules that must never regress: allowances are never counted as
+profit, opening balances are counted exactly once, the three-legged sale (`invest → fund`
+principal, `Dad → fund` profit, `invest → Dad` loss), the minimum order size, the 0.01-share
+slice floor and the "always keep ₪10 in the pocket" rule. It also checks that all 44 stocks
+carry a Hebrew name + explanation and that the Alpaca/Yahoo payload parsing still maps the
+live prices.
+
+`npm run verify:guardrails` proves the *running server* still refuses bad money requests
+(below-minimum order, sub-0.01 slice, illegal sell percentage, wrong PIN, too-small transfer).
+Each request is first pushed through the same rules the server uses; if the rules say the
+request would be legal the script refuses to send it, so a "test" can never execute a real trade.
 
 ## Stocks Available
 
