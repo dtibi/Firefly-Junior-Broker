@@ -8,8 +8,7 @@ const en = {
 
   nav: {
     brokeragePanel: 'Brokerage Panel',
-    bankOfDad: 'BANK OF DAD',
-    liveFxSync: 'LIVE FX SYNC',
+    investCash: 'INVESTING CASH',
     brokerProfile: 'Broker Profile',
     logout: 'LOGOUT',
     securedGateway: 'SECURED DOUBLE-ENTRY GATEWAY',
@@ -18,7 +17,7 @@ const en = {
   profileSelection: {
     sandboxBadge: 'Interactive Financial Sandbox',
     whoIsTrading: 'Who is trading today?',
-    subtitle: 'Firefly Junior Broker links your allowance piggy bank to live market prices. Grow your savings through real stakes safely managed by the Bank of Dad!',
+    subtitle: 'פיירפליי ג׳וניור ברוקר מחבר את דמי הכיס שלך למחירי שוק אמיתיים. תשקיע בכסף אמיתי, תראה איך השוק זז, ותראה איך החסכון שלך גדל.',
     yearsOld: 'years old',
     enterPin: 'ENTER PIN',
     newBroker: 'New Broker',
@@ -46,7 +45,7 @@ const en = {
   dashboard: {
     goodDay: 'Good Day',
     brokerActive: 'Broker Active',
-    ledgerSyncing: 'Your ledger is syncing with parent savings',
+    ledgerSyncing: 'הספר שלך מחובר לספר החשבונות של הבית (Firefly III)',
     refreshLedger: 'REFRESH LEDGER',
     forceDailySnapshot: 'FORCE DAILY SNAPSHOT',
     myVault: 'My Vault',
@@ -60,9 +59,9 @@ const en = {
     investedStocks: 'Invested Stocks',
     ledgerAccounts: 'Ledger Accounts',
     synced: 'SYNCED',
-    syncedDesc: 'Your money balance is held securely in the Bank of Dad\'s asset registry. When you trade, Firefly moves real capital between accounts:',
-    piggyBank: 'Piggy Bank:',
-    brokerStorage: 'Broker Storage:',
+    syncedDesc: 'יתרת הכסף שלך מוחזקת בספר החשבונות של הבית (Firefly III) — ספר כפול אמיתי. כשאתה סוחר, הוא רושם תנועות אמיתיות בין החשבונות שלך:',
+    piggyBank: 'קרן ההשקעות:',
+    brokerStorage: 'חשבון המניות:',
     myWealthPerformance: 'My Wealth Performance',
     dailyAppraisal: 'Daily appraisal curve of your portfolio value',
     dayGrowth: '30-Day Growth',
@@ -130,13 +129,13 @@ const en = {
 
   ledger: {
     learnDoubleEntry: 'Learn Double-Entry Accounting!',
-    doubleEntryDesc: 'When grown-ups buy or sell assets, money never vanishes. It always travels in a structured double loop! In our broker, liquidations are routed through the "Bank of Dad" Clearance Account:',
+    doubleEntryDesc: 'כשקונים או מוכרים משהו הכסף לא נעלם — לכל תנועה יש שני צדדים. בכל מכירה אצלנו יש שני חלקים: הכסף שלך חוזר, והשוק משלם את הרווח או סופג את ההפסד:',
     actionA: 'Action A: Principal return',
-    actionADesc: 'Your original buying investment amount is sent safely from your Investment Account back to your Savings Account.',
+    actionADesc: 'סכום הקנייה המקורי שלך חוזר מחשבון המניות לחשבון שממנו קנית — לכיס או לקרן.',
     actionB: 'Action B: Profit reward',
-    actionBDesc: 'If the stock went UP, the extra profit money is transferred directly from the Bank of Dad pool into your savings!',
+    actionBDesc: 'אם המניה עלתה, השוק משלם את הרווח ישר לחשבון שממנו קנית.',
     actionC: 'Action C: Loss adjustment',
-    actionCDesc: 'If the stock went DOWN, the lost amount is transferred from your Investment Account back to Dad, returning less to your savings.',
+    actionCDesc: 'אם המניה ירדה, אתה מקבל פחות ממה ששילמת — הכסף נשאר בשוק.',
     fireflyLedgerEvents: 'Firefly Ledger Events',
     noLedgerEvents: 'No ledger events recorded on this system.',
     bought: 'Bought',
@@ -180,7 +179,7 @@ const en = {
     enterPin: 'Enter 4-digit PIN',
     authorizing: 'Authorizing: Trade transaction on',
     incorrectPin: 'Incorrect PIN! Try again.',
-    protectedBy: 'PROTECTED BY BANK OF DAD LEDGER DEPLOYMENT',
+    protectedBy: 'מוגן על ידי ספר חשבונות כפול',
     clear: 'CLEAR',
   },
 
@@ -224,9 +223,9 @@ const en = {
     sharesOf: 'shares of',
     for: 'for a total return of',
     earnedProfit: 'You earned',
-    profitFromDad: 'in profit from the Bank of Dad! 🎁',
+
     lossesAdjusted: 'Your losses of',
-    adjustedThroughDad: 'were adjusted through Dad\'s clearance.',
+
     brokeEven: 'You broke even — no profit or loss on this trade! Principal returned to savings. 📊',
     minOrderSize: 'Minimum order size is exactly 10 currency units!',
     insufficientFunds: 'Insufficient savings capital!',
@@ -244,8 +243,7 @@ const he: typeof en = {
 
   nav: {
     brokeragePanel: 'פאנל ברוקראז\'',
-    bankOfDad: 'בנק של אבא',
-    liveFxSync: 'סנכרון מט״ח חי',
+    investCash: 'פנוי להשקעה',
     brokerProfile: 'פרופיל ברוקר',
     logout: 'התנתקות',
     securedGateway: 'שער כניסה כפול מאובטח',
@@ -254,7 +252,7 @@ const he: typeof en = {
   profileSelection: {
     sandboxBadge: 'ארגז חול פיננסי אינטראקטיבי',
     whoIsTrading: 'מי סוחר היום?',
-    subtitle: 'פיירפליי ג׳וניור ברוקר מחבר את קופת דמי הכיס שלך למחירי שוק אמיתיים. תגדל את החסכונות שלך דרך השקעות אמיתיות המנוהלות בבטחה על ידי בנק של אבא!',
+    subtitle: 'פיירפליי ג׳וניור ברוקר מחבר את דמי הכיס שלך למחירי שוק אמיתיים. תשקיע בכסף אמיתי, תראה איך השוק זז, ותראה איך החסכון שלך גדל.',
     yearsOld: 'שנים',
     enterPin: 'הכנס קוד סודי',
     newBroker: 'ברוקר חדש',
@@ -282,7 +280,7 @@ const he: typeof en = {
   dashboard: {
     goodDay: 'יום טוב',
     brokerActive: 'ברוקר פעיל',
-    ledgerSyncing: 'הספר שלך מסונכרן עם חסכונות ההורה',
+    ledgerSyncing: 'הספר שלך מחובר לספר החשבונות של הבית (Firefly III)',
     refreshLedger: 'רענן ספר חשבונות',
     forceDailySnapshot: 'צור תמונת מצב יומית',
     myVault: 'הכספת שלי',
@@ -296,9 +294,9 @@ const he: typeof en = {
     investedStocks: 'מניות מושקעות',
     ledgerAccounts: 'חשבונות ספר חשבונות',
     synced: 'מסונכרן',
-    syncedDesc: 'יתרת הכסף שלך מוחזקת בבטחה ברישום הנכסים של בנק של אבא. כשאתה סוחר, פיירפליי מעביר הון אמיתי בין חשבונות:',
-    piggyBank: 'קופת חיסכון:',
-    brokerStorage: 'אחסון ברוקר:',
+    syncedDesc: 'יתרת הכסף שלך מוחזקת בספר החשבונות של הבית (Firefly III) — ספר כפול אמיתי. כשאתה סוחר, הוא רושם תנועות אמיתיות בין החשבונות שלך:',
+    piggyBank: 'קרן ההשקעות:',
+    brokerStorage: 'חשבון המניות:',
     myWealthPerformance: 'ביצועי ההון שלי',
     dailyAppraisal: 'עקומת הערכה יומית של ערך התיק שלך',
     dayGrowth: 'צמיחה ב-30 יום',
@@ -366,13 +364,13 @@ const he: typeof en = {
 
   ledger: {
     learnDoubleEntry: 'למד הנהלת חשבונות כפולה!',
-    doubleEntryDesc: 'כשמבוגרים קונים או מוכרים נכסים, כסף אף פעם לא נעלם. הוא תמיד נע בלולאה כפולה מובנית! בברוקר שלנו, נזילות מנותבות דרך חשבון הסליקה "בנק של אבא":',
+    doubleEntryDesc: 'כשקונים או מוכרים משהו הכסף לא נעלם — לכל תנועה יש שני צדדים. בכל מכירה אצלנו יש שני חלקים: הכסף שלך חוזר, והשוק משלם את הרווח או סופג את ההפסד:',
     actionA: 'פעולה א\': החזר קרן',
-    actionADesc: 'סכום ההשקעה המקורי שלך נשלח בבטחה מחשבון ההשקעות שלך בחזרה לחשבון החיסכון שלך.',
+    actionADesc: 'סכום הקנייה המקורי שלך חוזר מחשבון המניות לחשבון שממנו קנית — לכיס או לקרן.',
     actionB: 'פעולה ב\': תגמול רווח',
-    actionBDesc: 'אם המניה עלתה, כסף הרווח הנוסף מועבר ישירות מקופת בנק של אבא אל החיסכון שלך!',
+    actionBDesc: 'אם המניה עלתה, השוק משלם את הרווח ישר לחשבון שממנו קנית.',
     actionC: 'פעולה ג\': התאמת הפסד',
-    actionCDesc: 'אם המניה ירדה, הסכום שאבד מועבר מחשבון ההשקעות שלך בחזרה לאבא, ומחזיר פחות לחיסכון שלך.',
+    actionCDesc: 'אם המניה ירדה, אתה מקבל פחות ממה ששילמת — הכסף נשאר בשוק.',
     fireflyLedgerEvents: 'אירועי ספר חשבונות פיירפליי',
     noLedgerEvents: 'אין אירועי ספר חשבונות רשומים במערכת זו.',
     bought: 'קנה',
@@ -416,7 +414,7 @@ const he: typeof en = {
     enterPin: 'הכנס קוד סודי בן 4 ספרות',
     authorizing: 'מאשר: עסקת מסחר על',
     incorrectPin: 'קוד שגוי! נסה שוב.',
-    protectedBy: 'מוגן על ידי מערכת ספר חשבונות בנק של אבא',
+    protectedBy: 'מוגן על ידי ספר חשבונות כפול',
     clear: 'נקה',
   },
 
@@ -460,9 +458,9 @@ const he: typeof en = {
     sharesOf: 'מניות של',
     for: 'תמורת החזר כולל של',
     earnedProfit: 'הרווחת',
-    profitFromDad: 'ברווח מבנק של אבא! 🎁',
+
     lossesAdjusted: 'ההפסדים שלך בסך',
-    adjustedThroughDad: 'הותאמו דרך סליקת אבא.',
+
     brokeEven: 'יצאת מאוזן — אין רווח או הפסד בעסקה זו! הקרן הוחזרה לחיסכון. 📊',
     minOrderSize: 'גודל הזמנה מינימלי הוא בדיוק 10 יחידות מטבע!',
     insufficientFunds: 'אין מספיק הון חיסכון!',

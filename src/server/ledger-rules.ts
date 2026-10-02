@@ -15,7 +15,7 @@
  *                               own money into the fund never looks like profit
  *
  * Rules:
- *  - Flows with the Bank of Dad account are the trading P&L — never a deposit.
+ *  - Flows with the market clearing account are the trading P&L — never a deposit.
  *  - Firefly mirrors opening balances as synthetic "opening balance" transactions;
  *    they are skipped here and added exactly once from the account record.
  *  - Internal moves (own account → own account) never change a whole-kid baseline,
@@ -73,13 +73,13 @@ export function classifyKidLedger(
     own: LedgerAccount[];
     /** Ids that belong to the INVESTED world (invest fund + invested principal). */
     fundIds: string[];
-    /** The Bank of Dad clearing account id (trading P&L). */
-    dadAccountId: string;
+    /** The market clearing account id (trading P&L). */
+    clearingAccountId: string;
   }
 ): FlowClassification {
   const ownIds = new Set(options.own.map((a) => String(a.id)));
   const fundIds = new Set(options.fundIds.map(String));
-  const dadId = String(options.dadAccountId);
+  const clearingId = String(options.clearingAccountId);
 
   let externalDepositsLocal = 0;
   let investedFromOutsideLocal = 0;
@@ -118,9 +118,9 @@ export function classifyKidLedger(
       const amount = Number(split.amount || 0);
       if (!amount) continue;
 
-      // Bank-of-Dad flows ARE the profit/loss: never part of a baseline.
-      if (src === dadId || dst === dadId) {
-        if (dst === dadId) realizedPnlLocal -= amount;
+      // Clearing flows ARE the profit/loss: never part of a baseline.
+      if (src === clearingId || dst === clearingId) {
+        if (dst === clearingId) realizedPnlLocal -= amount;
         else realizedPnlLocal += amount;
         continue;
       }
@@ -236,7 +236,7 @@ export interface StatementInput {
   pocketId: string;
   fundId: string;
   investmentId: string;
-  dadAccountId: string;
+  clearingAccountId: string;
   /** id → {name, type} for every account in the instance. */
   accountsById: Record<string, { name?: string; type?: string }>;
   /** Opening balances, so the statement can start where the ledger starts. */
@@ -260,7 +260,7 @@ function kinderLabel(kind: StatementKind, description: string): string {
   return `${base} — ${description}`;
 }
 
-/** "רווח מהבנק של אבא על מכירת TSLA" / "... Sell 0.0146 shares of TSLA" → TSLA */
+/** "רווח במכירת TSLA: +₪0.30 מהשוק" / "... Sell 0.0146 shares of TSLA" → TSLA */
 export function tickerFromDescription(description: string): string | null {
   const hebrew = description.match(/מכירת\s+([A-Z][A-Z.]{0,6})/);
   if (hebrew) return hebrew[1];
@@ -282,7 +282,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
     if (id === input.fundId || id === input.investmentId) return 'INVEST';
     return null;
   };
-  const dadId = String(input.dadAccountId);
+  const clearingId = String(input.clearingAccountId);
 
   const rows: StatementRow[] = [];
 
@@ -323,10 +323,9 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
       const dstSection = sectionOf(dst);
       const base = { journalId, date, description };
 
-      // Bank of Dad: the trading profit/loss, never a deposit.
-      // Bank of Dad settles the result of a SALE — the kid is the one who made or
-      // lost the money, so the row carries the stock's name, not "Dad's loss".
-      if (src === dadId && dstSection) {
+      // The clearing account settles a SALE's result; the kid is the one who made
+      // or lost the money on the market, so the row carries the stock's name.
+      if (src === clearingId && dstSection) {
         rows.push({
           ...base,
           kind: 'PROFIT',
@@ -338,7 +337,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
         });
         continue;
       }
-      if (dst === dadId && srcSection) {
+      if (dst === clearingId && srcSection) {
         rows.push({
           ...base,
           kind: 'LOSS',

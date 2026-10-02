@@ -18,7 +18,7 @@ import { classifyKidLedger, cumulativeThrough, investedProfit } from '../src/ser
 const CHECKING = '4'; // 🍬 pocket money
 const SAVINGS = '6'; // 🏦 invest fund
 const INVEST = '26'; // 📈 invested principal
-const DAD = '25'; // Bank of Dad clearing
+const CLEARING_ACCOUNT = '25'; // the market's side of a trade
 const ALLOWANCE = '11'; // revenue account
 const SHOP = '12'; // expense account
 
@@ -49,7 +49,7 @@ const kid = (accounts: { id: string; name: string; openingBalance?: number; open
 ]) => ({
   own: accounts,
   fundIds: [SAVINGS, INVEST],
-  dadAccountId: DAD,
+  clearingAccountId: CLEARING_ACCOUNT,
 });
 
 const classify = (journals: any[], accountFixture = kid()) => classifyKidLedger(journals, accountFixture);
@@ -96,14 +96,14 @@ describe('invested-world baseline (chart line)', () => {
 
 describe('Bank of Dad flows are the profit/loss itself', () => {
   test('a profit paid by Dad is realized P&L, not a deposit', () => {
-    const result = classify([journal(split(DAD, SAVINGS, 5))]);
+    const result = classify([journal(split(CLEARING_ACCOUNT, SAVINGS, 5))]);
     assert.equal(result.realizedPnlLocal, 5);
     assert.equal(result.externalDepositsLocal, 0);
     assert.equal(result.investedFromOutsideLocal, 0);
   });
 
   test('a loss paid to Dad is negative realized P&L', () => {
-    const result = classify([journal(split(INVEST, DAD, 1.19))]);
+    const result = classify([journal(split(INVEST, CLEARING_ACCOUNT, 1.19))]);
     assert.equal(result.realizedPnlLocal, -1.19);
     assert.equal(result.investedFromOutsideLocal, 0);
   });
@@ -161,8 +161,8 @@ describe('the money identity', () => {
     const journals = [
       journal(split(ALLOWANCE, SAVINGS, 100, { description: 'allowance' })),
       journal(split(SAVINGS, INVEST, 100, { description: 'buy' })),
-      journal(split(DAD, SAVINGS, 10, { description: 'profit' })),
-      journal(split(INVEST, DAD, 5, { description: 'loss' })),
+      journal(split(CLEARING_ACCOUNT, SAVINGS, 10, { description: 'profit' })),
+      journal(split(INVEST, CLEARING_ACCOUNT, 5, { description: 'loss' })),
     ];
     const result = classify(journals);
 

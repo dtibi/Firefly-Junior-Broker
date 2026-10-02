@@ -103,8 +103,9 @@ for life:
 own principal — not from a weighted average.
 
 **Selling.** The principal goes back where it came from, and the market result is posted as its
-own entry: a gain comes from the *Bank of Dad* clearance account, a loss goes to it. So profit is
-never confused with an allowance, and a loss is a real loss.
+own entry: the gain is *paid by the market*, and a loss is money *the market kept*. (A single
+internal clearing account sits behind every trade to hold the market's side of it — the kids never
+see it.) So profit is never confused with an allowance, and a loss is a real loss.
 
 **No transfers, ever.** There is no path from the investing account back to the pocket except
 selling what he bought, and none from the pocket to the investing account except buying. That
@@ -130,7 +131,8 @@ showing numbers.
   doesn't exist, no returning a lot's money to the wrong account, a 4-digit PIN (SHA-256 hashed)
   for login and for every trade, and no way to move money between accounts.
 - **One place for both kids.** Each child has an avatar, a PIN, their own three Firefly accounts
-  and their own book — plus a Bank-of-Dad account that clears the trading results.
+  and their own book — plus one internal clearing account that carries the market's side of every
+  trade.
 
 <br>
 
@@ -154,7 +156,7 @@ tier is enough — used for market data only) and a **Google Gemini** API key fo
 FIREFLY_INSTANCE_URL="http://localhost"       # your Firefly III instance
 FIREFLY_PERSONAL_ACCESS_TOKEN="ey..."         # Firefly III profile → OAuth
 
-BANK_OF_DAD_ACCOUNT_ID="25"                   # the parent's clearing asset account
+MARKET_CLEARING_ACCOUNT_ID="25"               # internal: settles each sale's gain/loss
 
 ALPACA_API_KEY_ID="PK..."                     # live prices (paper keys work)
 ALPACA_API_SECRET_KEY="..."
@@ -173,7 +175,7 @@ Each child needs three asset accounts, plus one clearing account for the parent:
 | Spending | asset | pocket money | "Natanel" |
 | Savings | asset | the invest fund | "Natanel Savings" |
 | Investment | asset | the stocks' book value | "Natanel Investments" |
-| Bank of Dad | asset | settles trading profit/loss | "Bank of Dad: Portfolio Clearing" |
+| Market clearing | asset | carries the market's side of a sale | "שוק ההון — סליקת מסחר" |
 
 Enter the four account ids when you create the profile in the app.
 
@@ -183,8 +185,8 @@ Enter the four account ids when you create the profile in the app.
 |---|---|
 | Buy from the pocket | spending → investment (one purchase = one lot) |
 | Buy from the fund | savings → investment (one purchase = one lot) |
-| Sell a lot (profit) | investment → origin (principal) + Bank of Dad → origin (gain) |
-| Sell a lot (loss) | investment → origin (value) + investment → Bank of Dad (loss) |
+| Sell a lot (profit) | investment → origin (principal) + clearing → origin (the market pays the gain) |
+| Sell a lot (loss) | investment → origin (value) + investment → clearing (the market keeps the loss) |
 | Allowance / work income | revenue → pocket and/or fund (a deposit) |
 | Between the two accounts | **nothing — there is no such path, by design** |
 

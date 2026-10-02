@@ -34,7 +34,7 @@ export interface KidFinancials {
    *  This is the performance chart's baseline: pocket-money transfers in count
    *  here, so moving money from the pocket into the fund never looks like profit. */
   investedFromOutsideLocal: number;
-  /** Trading profit/loss routed through the Bank of Dad clearing account. */
+  /** Trading profit/loss settled through the market clearing account. */
   realizedPnlLocal: number;
   /** Dated external flows — used to rebuild historical snapshots. */
   externalFlows: ExternalFlow[];
@@ -185,7 +185,7 @@ export const LedgerService = {
    * Posts the ledger legs of selling ONE lot (approved 2026-10-02):
    *   - the principal returns to the account the lot came FROM (pocket-funded
    *     lot → the pocket, fund-funded lot → the invest fund),
-   *   - a gain comes from the Bank of Dad, a loss goes to it,
+   *   - a gain comes from the market clearing account, a loss goes to it,
    *   - a break-even sale posts no adjustment leg (Firefly rejects ₪0.00).
    * One journal per lot, so every lot stays traceable inside Firefly III.
    */
@@ -198,7 +198,9 @@ export const LedgerService = {
     investmentAccountId: string;
   }): Promise<{ principalTransferId: string; adjustmentTransferId: string }> {
     const { sale, kidName, acquiredAt, fundAccountId, pocketAccountId, investmentAccountId } = params;
-    const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '25';
+    const clearingAccountId = process.env.MARKET_CLEARING_ACCOUNT_ID
+      || process.env.BANK_OF_DAD_ACCOUNT_ID   // legacy name, kept so a running .env keeps working
+      || '25';
     const isPocket = sale.destination === 'POCKET';
     const backTo = isPocket ? pocketAccountId : fundAccountId;
     const boughtOn = String(acquiredAt || '').slice(0, 10);
@@ -213,23 +215,25 @@ export const LedgerService = {
       backTo
     );
 
-    // Leg 2: only the gain/loss crosses the Bank of Dad — never the principal.
+    // Leg 2: only the gain/loss touches the market clearing account — never the
+    // principal. The kid made or lost the money on the market, so the description
+    // names the stock, not whoever settled it.
     let adjustmentTransferId = '';
     if (sale.adjustmentKind === 'profit') {
       adjustmentTransferId = await this.createTransfer(
         sale.adjustmentLocal,
-        `רווח מהבנק של אבא על מכירת ${sale.ticker}: +₪${sale.adjustmentLocal.toFixed(2)} `
+        `רווח במכירת ${sale.ticker}: +₪${sale.adjustmentLocal.toFixed(2)} מהשוק `
           + `(מגרש מ-${boughtOn}) — ${kidName}`,
-        dadAccountId,
+        clearingAccountId,
         backTo
       );
     } else if (sale.adjustmentKind === 'loss') {
       adjustmentTransferId = await this.createTransfer(
         sale.adjustmentLocal,
-        `הפסד על מכירת ${sale.ticker}: −₪${sale.adjustmentLocal.toFixed(2)} `
-          + `עברו לבנק של אבא (מגרש מ-${boughtOn}) — ${kidName}`,
+        `הפסד במכירת ${sale.ticker}: −₪${sale.adjustmentLocal.toFixed(2)} נשאר בשוק `
+          + `(מגרש מ-${boughtOn}) — ${kidName}`,
         investmentAccountId,
-        dadAccountId
+        clearingAccountId
       );
     }
 
@@ -295,10 +299,10 @@ export const LedgerService = {
    * The kid's financial breakdown:
    *   - the three pockets (pocket money / invest fund / invested principal)
    *   - the NET money that came in from outside → the performance chart's baseline
-   *   - realized trading P&L (routed through the Bank of Dad clearing account)
+   *   - realized trading P&L (settled through the market clearing account)
    *
    * Rule: every flow crossing the boundary of the kid's own accounts is an
-   * external deposit or spending event — EXCEPT flows with the Bank of Dad
+   * external deposit or spending event — EXCEPT flows with the clearing
    * account, which ARE the trading profit/loss and must not count as deposits.
    */
   async getFinancialBreakdown(profile: {
@@ -319,7 +323,9 @@ export const LedgerService = {
     // Firefly unreachable → let the caller fall back to the local cache
     if (!savings && !investment) return null;
 
-    const dadId = process.env.BANK_OF_DAD_ACCOUNT_ID || '25';
+    const clearingId = process.env.MARKET_CLEARING_ACCOUNT_ID
+      || process.env.BANK_OF_DAD_ACCOUNT_ID
+      || '25';
 
     // Gather every journal that touches one of the kid's accounts, then let the
     // pure rules module do the classification (see src/server/ledger-rules.ts).
@@ -343,7 +349,7 @@ export const LedgerService = {
           };
         }),
       fundIds: [savings?.id, investment?.id].filter(Boolean) as string[],
-      dadAccountId: dadId,
+      clearingAccountId: clearingId,
     });
 
     const result: KidFinancials = {

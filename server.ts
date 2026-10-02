@@ -221,7 +221,7 @@ async function startServer() {
 
       // ---- Baselines: money that came in from OUTSIDE ------------------------
       // Allowance / work income / pocket-money transfers raise the baseline, so
-      // they are never reported as investment profit. Bank-of-Dad flows are the
+      // they are never reported as investment profit. Clearing-account flows are the
       // trading profit/loss itself and are excluded from the baseline.
       const investedFromOutsideLocal = Number(
         (financials?.investedFromOutsideLocal ?? profile.cumulativeDeposits ?? 0).toFixed(2)
@@ -516,7 +516,7 @@ async function startServer() {
         const { sales, totals } = salePlan.value;
 
         // One journal pair per lot (approved): the principal goes back to the
-        // account that lot came from, and only the gain/loss crosses Dad.
+        // account that lot came from, and only the gain/loss crosses the clearing account.
         const journalIds: string[] = [];
         for (const sale of sales) {
           const lot = selected.find((l) => l.id === sale.lotId) as (typeof selected)[number];
@@ -560,9 +560,9 @@ async function startServer() {
             : 'לחשבונות שמהם הן נקנו';
         const resultHe =
           totals.deltaLocal > 0
-            ? `הרווחת ₪${totals.deltaLocal.toFixed(2)} — הבנק של אבא השלים לך 🎁`
+            ? `הרווחת ₪${totals.deltaLocal.toFixed(2)} — השוק שילם לך את הרווח 🎁`
             : totals.deltaLocal < 0
-              ? `הפסדת ₪${Math.abs(totals.deltaLocal).toFixed(2)} — את זה סופג הבנק של אבא 😢`
+              ? `הפסדת ₪${Math.abs(totals.deltaLocal).toFixed(2)} — הכסף נשאר בשוק 😢`
               : 'יצאת בדיוק באותו סכום — בלי רווח ובלי הפסד 📊';
 
         return res.json({
@@ -674,7 +674,9 @@ async function startServer() {
           pocketId: pocket.id,
           fundId: fund.id,
           investmentId: investments.id,
-          dadAccountId: process.env.BANK_OF_DAD_ACCOUNT_ID || '25',
+          clearingAccountId: process.env.MARKET_CLEARING_ACCOUNT_ID
+            || process.env.BANK_OF_DAD_ACCOUNT_ID   // legacy name
+            || '25',
           accountsById,
           openingByAccount: {
             [pocket.id]: pocket.openingBalance,

@@ -15,8 +15,8 @@
  *    sold lot posts its own principal return + gain/loss adjustment in the ledger,
  *    so every lot stays traceable inside Firefly III.
  *  - Arithmetic mirrors the legacy three-legged liquidation exactly
- *    (gain: principal back + Dad profit → destination; loss: value back + loss
- *    →Dad; break-even: no adjustment leg at all).
+ *    (gain: principal back + the market's payment → destination; loss: value back +
+ *    the loss → the clearing account; break-even: no adjustment leg at all).
  */
 
 import { CurrencyMode, FundingSource, Holding, Lot } from '../types.js';
@@ -79,7 +79,7 @@ export interface LotSale {
   isGain: boolean;
   /** What the investment account pays back: principal on a gain, value on a loss. */
   principalReturnLocal: number;
-  /** |gain/loss| routed through the Bank of Dad (0 → no adjustment journal). */
+  /** |gain/loss| settled through the market clearing account (0 → no adjustment journal). */
   adjustmentLocal: number;
   adjustmentKind: 'none' | 'profit' | 'loss';
   /** Back where the money came from — the lot's own origin. */

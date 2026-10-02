@@ -481,7 +481,7 @@ export default function App() {
               {/* Wallet Balance Capsule */}
               <div className="hidden md:flex bg-slate-50 rounded-full px-4 py-1.5 items-center gap-2 border border-slate-200 shadow-inner">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  {selectedProfile.currencyMode === 'PARITY' ? t('nav.bankOfDad') : t('nav.liveFxSync')}
+                  {t('nav.investCash')}
                 </span>
                 <span className="text-sm font-extrabold text-slate-800">
                   {summary ? `${t('common.ils')}${summary.cashLocal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${t('common.ils')}0.00`}
@@ -751,7 +751,7 @@ export default function App() {
                       </span>
                     </div>
                     <p className="text-xs font-semibold text-slate-500 mt-1">
-                      {t('dashboard.ledgerSyncing')} #{selectedProfile.savingsAccountId}.
+                      {t('dashboard.ledgerSyncing')}.
                     </p>
                   </div>
                 </div>
@@ -897,11 +897,11 @@ export default function App() {
                         <div className="bg-slate-50 p-4 rounded-2xl space-y-2 border border-slate-200/60 text-xs">
                           <div className="flex justify-between font-bold text-slate-500">
                             <span>{t('dashboard.piggyBank')}</span>
-                            <span className="text-slate-800 font-extrabold font-mono text-[11px]">#{selectedProfile.savingsAccountId}</span>
+                            <span className="text-emerald-600 font-extrabold text-[11px]">{t('dashboard.synced')}</span>
                           </div>
                           <div className="flex justify-between font-bold text-slate-500">
                             <span>{t('dashboard.brokerStorage')}</span>
-                            <span className="text-slate-800 font-extrabold font-mono text-[11px]">#{selectedProfile.investmentAccountId}</span>
+                            <span className="text-emerald-600 font-extrabold text-[11px]">{t('dashboard.synced')}</span>
                           </div>
                         </div>
                       </div>
@@ -1418,8 +1418,11 @@ export default function App() {
                                           }
                                         >
                                           {selectedLotsTotals.gain >= 0 ? 'רווח' : 'הפסד'}{' '}
-                                          {money(Math.abs(selectedLotsTotals.gain))} — הבנק של אבא{' '}
-                                          {selectedLotsTotals.gain >= 0 ? 'ישלים' : 'יספוג'}
+                                          {money(Math.abs(selectedLotsTotals.gain))}{' '}
+                                          {selectedLots.length === 1
+                                            ? `במכירת ${selectedLots[0].ticker}`
+                                            : `במכירת ${selectedLots.length} עסקאות`}{' '}
+                                          — {selectedLotsTotals.gain >= 0 ? 'מהשוק' : 'נשאר בשוק'}
                                         </div>
                                       </div>
                                     )}

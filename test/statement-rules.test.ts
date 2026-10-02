@@ -19,7 +19,7 @@ import {
 const POCKET = '4';
 const FUND = '6';
 const INVEST = '26';
-const DAD = '25';
+const CLEARING_ACCOUNT = '25'; // the market's side of a trade
 
 const accountsById = {
   '4': { name: 'Natanel', type: 'asset' },
@@ -41,7 +41,7 @@ const input = (openingByAccount = {}) => ({
   pocketId: POCKET,
   fundId: FUND,
   investmentId: INVEST,
-  dadAccountId: DAD,
+  clearingAccountId: CLEARING_ACCOUNT,
   accountsById,
   openingByAccount,
 });
@@ -134,8 +134,8 @@ describe('classifyStatement — Hebrew, two accounts', () => {
   test('Bank-of-Dad flows are profit and loss, never deposits', () => {
     const rows = classifyStatement(
       [
-        journal('330', '2026-09-30', DAD, FUND, 4.93, 'רווח'),
-        journal('331', '2026-09-30', INVEST, DAD, 0.07, 'הפסד'),
+        journal('330', '2026-09-30', CLEARING_ACCOUNT, FUND, 4.93, 'רווח'),
+        journal('331', '2026-09-30', INVEST, CLEARING_ACCOUNT, 0.07, 'הפסד'),
       ],
       input()
     );
@@ -146,8 +146,8 @@ describe('classifyStatement — Hebrew, two accounts', () => {
   test('a profit or loss row is named after the stock that was sold, never "Dad"', () => {
     const rows = classifyStatement(
       [
-        journal('p', '2026-08-25', DAD, INVEST, 0.3, 'רווח מהבנק של אבא על מכירת TSLA'),
-        journal('l', '2026-08-24', INVEST, DAD, 1.19, 'הפסד על מכירת RBLX — הועבר לבנק של אבא'),
+        journal('p', '2026-08-25', CLEARING_ACCOUNT, INVEST, 0.3, 'רווח במכירת TSLA: +₪0.30 מהשוק'),
+        journal('l', '2026-08-24', INVEST, CLEARING_ACCOUNT, 1.19, 'הפסד במכירת RBLX: −₪1.19 נשאר בשוק'),
       ],
       input()
     );
@@ -157,7 +157,7 @@ describe('classifyStatement — Hebrew, two accounts', () => {
 
   test('translating a profit row written in the old English form still names the stock', () => {
     const rows = classifyStatement(
-      [journal('p2', '2026-08-25', DAD, INVEST, 0.3, 'Liquidation Investment Profit (Bank of Dad): Sell 0.0584 shares of TSLA')],
+      [journal('p2', '2026-08-25', CLEARING_ACCOUNT, INVEST, 0.3, 'Liquidation Investment Profit (Market Clearing): Sell 0.0584 shares of TSLA')],
       input()
     );
     assert.equal(rows[0].labelHe, 'רווח במכירת TSLA');
