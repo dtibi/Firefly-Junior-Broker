@@ -1658,7 +1658,9 @@ export default function App() {
                               .slice(-10)
                               .map((m: any) => (
                                 <div key={m.month} className="shrink-0 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
-                                  <p className="text-[10px] font-extrabold text-slate-500">{m.month}</p>
+                                  <p className="text-[10px] font-extrabold text-slate-500">
+                                    {Number(m.month.slice(5, 7))}/{m.month.slice(2, 4)}
+                                  </p>
                                   <p className="text-[10px] font-bold text-emerald-600">+₪{Number(m.inLocal).toFixed(2)}</p>
                                   <p className="text-[10px] font-bold text-rose-500">−₪{Math.abs(Number(m.outLocal)).toFixed(2)}</p>
                                   <p className="text-[10px] font-extrabold text-slate-700">
@@ -1684,7 +1686,7 @@ export default function App() {
                                     <p className="text-[11px] font-extrabold text-slate-800 truncate">
                                       {kindEmoji(m.kind)} {m.labelHe}
                                     </p>
-                                    <p className="text-[10px] font-bold text-slate-400">{m.date || '—'}</p>
+                                    <p className="text-[10px] font-bold text-slate-400">{m.date ? fmtDate(m.date) : '—'}</p>
                                   </div>
                                   <div className="text-right shrink-0">
                                     <p
@@ -1782,7 +1784,7 @@ export default function App() {
                                         className="flex justify-between items-center p-3 rounded-2xl bg-slate-50/60 border border-slate-100 text-[11px] font-bold text-slate-600"
                                       >
                                         <span>
-                                          💵 {lot.ticker} · נמכר {String(lot.closedAt || '').slice(0, 10)}
+                                          💵 {lot.ticker} · נמכר {lot.closedAt ? fmtDate(lot.closedAt) : '—'}
                                         </span>
                                         <span className={isProfit ? 'text-emerald-600' : 'text-rose-600'}>
                                           {isProfit ? '+' : ''}
