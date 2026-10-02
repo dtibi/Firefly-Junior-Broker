@@ -30,6 +30,7 @@ import {
   CheckCircle2,
   Briefcase,
   Languages,
+  Wallet,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Profile, Holding, Transaction, StockQuote, PortfolioSnapshot } from './types.js';
@@ -59,15 +60,21 @@ export default function App() {
   const [stockSearch, setStockSearch] = useState<string>('');
   const [stockHistory, setStockHistory] = useState<{ date: string; price: number }[]>([]);
 
-  // Pockets: pocket-money → invest-fund transfers with a "promise" lock window
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [showTransfer, setShowTransfer] = useState<boolean>(false);
-  const [transferAmount, setTransferAmount] = useState<string>('10');
-  const [transferLockDays, setTransferLockDays] = useState<number>(90);
+  // Lots, the two accounts and the bank statement (approved 2026-10-02).
+  // No transfers exist any more: money enters the investing account by buying
+  // (from the pocket or the fund) and a sale returns it to where it came from.
+  const [lots, setLots] = useState<any[]>([]);
+  const [lotSummary, setLotSummary] = useState<any>(null);
+  const [accounts, setAccounts] = useState<any>(null);
+  const [budgetSource, setBudgetSource] = useState<'POCKET' | 'FUND'>('POCKET');
+  const [selectedLotIds, setSelectedLotIds] = useState<string[]>([]);
+  const [statement, setStatement] = useState<any>(null);
+  const [statementSection, setStatementSection] = useState<'POCKET' | 'INVEST'>('POCKET');
+  const [statementShowAll, setStatementShowAll] = useState<boolean>(false);
 
   // UI Sub-modals & loaders
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'stocks' | 'ledger' | 'settings'>('dashboard');
-  const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | 'transfer' | null>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'stocks' | 'account' | 'ledger' | 'settings'>('dashboard');
+  const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | null>(null);
   const [targetProfileToLogin, setTargetProfileToLogin] = useState<Profile | null>(null);
   const [showAiModal, setShowAiModal] = useState<string | null>(null); // stock ticker
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
@@ -161,7 +168,10 @@ export default function App() {
         setHoldings(data.holdings);
         setHistory(data.transactions);
         setSnapshots(data.snapshots);
-        setTransfers(Array.isArray(data.transfers) ? data.transfers : []);
+        setLots(Array.isArray(data.lots) ? data.lots : []);
+        setLotSummary(data.lotSummary ?? null);
+        setAccounts(data.accounts ?? null);
+        setSelectedLotIds([]);
       }
     } catch (e) {
       console.error('Error fetching profile portfolio data:', e);
@@ -170,8 +180,20 @@ export default function App() {
     }
   };
 
+  // "החשבון שלי" — every movement in the kid's two accounts, straight from the ledger.
+  const fetchStatement = async (profileName: string) => {
+    try {
+      const res = await fetch(`/api/ledger/${encodeURIComponent(profileName)}/statement`);
+      const data = await res.json();
+      setStatement(data.success ? data : { error: data.error });
+    } catch (e) {
+      setStatement({ error: 'לא הצלחנו להביא את החשבון מהספר — נסו שוב.' });
+    }
+  };
+
   // Real daily price history for the selected stock (replaces the old fake curve)
   useEffect(() => {
+    setSelectedLotIds([]); // a new stock means a new lot selection
     if (!selectedStock) {
       setStockHistory([]);
       return;
@@ -193,12 +215,42 @@ export default function App() {
     };
   }, [selectedStock?.ticker]);
 
-  // Locked pocket-money promises that are still running
-  const activeLocks = transfers.filter((tr) => new Date(tr.lockedUntil).getTime() > Date.now());
-  const lockedTotal = activeLocks.reduce((sum, tr) => sum + (tr.amountLocal || 0), 0);
-
-  const daysLeftFor = (iso: string) =>
-    Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+  // The lots the kid can sell: only the ones HE bought, only the open ones.
+  const openLotsOfTicker = (ticker?: string) =>
+    lots.filter((l) => l.status === 'OPEN' && (!ticker || l.ticker === ticker));
+  const selectedLots = lots.filter((l) => selectedLotIds.includes(l.id));
+  const selectedLotsTotals = selectedLots.reduce(
+    (acc, l) => ({
+      principal: acc.principal + (l.principalLocal || 0),
+      value: acc.value + (l.currentValueUsd || 0),
+      gain: acc.gain + (l.gainLossUsd || 0),
+    }),
+    { principal: 0, value: 0, gain: 0 }
+  );
+  const toLocal = (usd: number) => (selectedProfile?.currencyMode === 'PARITY' ? usd : usd / (summary?.fxRate || 1));
+  const money = (usd: number) => `₪${toLocal(usd).toFixed(2)}`;
+  const accountCash = (which: 'POCKET' | 'FUND') =>
+    which === 'POCKET' ? (accounts?.pocket?.balanceLocal ?? summary?.pocketLocal ?? 0) : (accounts?.invest?.cashLocal ?? summary?.investFundLocal ?? 0);
+  const kindEmoji = (kind: string) =>
+    (({
+      OPENING: '🏁',
+      ALLOWANCE: '💰',
+      SAVING: '🧮',
+      DEPOSIT: '🎁',
+      SPENDING: '🛒',
+      TRANSFER_IN: '➡️',
+      TRANSFER_OUT: '⬅️',
+      BUY: '📈',
+      SELL: '💵',
+      PROFIT: '🎉',
+      LOSS: '😢',
+      CORRECTION: '🔧',
+    } as Record<string, string>)[kind] || '•');
+  const threeMonthsAgo = () => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 3);
+    return d.toISOString().slice(0, 10);
+  };
 
   // Stock directory filtering: category chips + free-text search
   const filteredStocks = stocks.filter((s) => {
@@ -257,6 +309,8 @@ export default function App() {
             ticker: selectedStock.ticker,
             type: 'BUY',
             amount: parseFloat(tradeAmountLocal),
+            // The kid chooses which account pays — and the lot remembers it for life.
+            fundingSource: budgetSource,
           }),
         });
         const data = await res.json();
@@ -290,7 +344,8 @@ export default function App() {
             pin,
             ticker: selectedStock.ticker,
             type: 'SELL',
-            amount: sellPercentage,
+            // These are the exact lots he picked — money returns to where each came from.
+            lotIds: selectedLotIds,
           }),
         });
         const data = await res.json();
@@ -307,34 +362,6 @@ export default function App() {
         }
       } catch (e: any) {
         setErrorText('Could not contact the trade execution ledger.');
-      }
-      return false;
-    }
-
-    if (showPinPad === 'transfer' && selectedProfile) {
-      try {
-        const res = await fetch(`/api/profiles/${encodeURIComponent(selectedProfile.name)}/transfer`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            pin,
-            amount: parseFloat(transferAmount),
-            lockDays: transferLockDays,
-          }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          setSuccessText(data.message);
-          setErrorText(null);
-          setShowPinPad(null);
-          setShowTransfer(false);
-          fetchActiveProfileData(selectedProfile.name);
-          return true;
-        }
-        setErrorText(data.error);
-        setShowPinPad(null);
-      } catch (e: any) {
-        setErrorText('Could not contact the ledger for the transfer.');
       }
       return false;
     }
@@ -764,6 +791,7 @@ export default function App() {
                 {[
                   { id: 'dashboard', label: t('dashboard.myVault'), icon: PiggyBank },
                   { id: 'stocks', label: t('dashboard.investMarket'), icon: Coins },
+                  { id: 'account', label: t('dashboard.myAccount'), icon: Wallet },
                   { id: 'ledger', label: t('dashboard.ledgerHistory'), icon: History },
                   { id: 'settings', label: t('dashboard.settings'), icon: User },
                 ].map((tab) => {
@@ -771,7 +799,11 @@ export default function App() {
                   return (
                     <button
                       key={tab.id}
-                      onClick={() => setActiveTab(tab.id as any)}
+                      onClick={() => {
+                        setActiveTab(tab.id as any);
+                        // The statement is read straight from the ledger every time it opens.
+                        if (tab.id === 'account' && selectedProfile) fetchStatement(selectedProfile.name);
+                      }}
                       className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                         activeTab === tab.id
                           ? 'bg-white text-slate-900 shadow-sm border border-slate-200/30 font-extrabold'
@@ -869,77 +901,57 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* Pockets + the pocket-money → invest-fund transfer
-                          (option ב: one-way valve + a "promise" lock window) */}
+                      {/* The two accounts: the pocket and the investing account.
+                          (No transfers exist — see src/server/lots.ts) */}
                       <div className="bg-white rounded-[28px] p-6 border border-slate-200 shadow-sm space-y-4">
                         <div className="flex justify-between items-center">
                           <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('pockets.title')}</h4>
-                          {lockedTotal > 0 && (
-                            <span className="bg-amber-50 text-amber-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-amber-100">
-                              🔒 ₪{lockedTotal.toFixed(2)}
-                            </span>
-                          )}
+                          <span className="bg-indigo-50 text-indigo-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-indigo-100">
+                            {lotSummary ? `${lotSummary.openLots} עסקאות 🧩` : ''}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3">
-                            <span className="text-[10px] font-bold uppercase text-emerald-700">{t('dashboard.pocketMoney')}</span>
-                            <p className="text-lg font-extrabold text-emerald-900">₪{(summary.pocketLocal ?? 0).toFixed(2)}</p>
-                          </div>
-                          <div className="bg-indigo-50/60 border border-indigo-100 rounded-2xl p-3">
-                            <span className="text-[10px] font-bold uppercase text-indigo-700">{t('dashboard.investFund')}</span>
-                            <p className="text-lg font-extrabold text-indigo-900">₪{(summary.investFundLocal ?? 0).toFixed(2)}</p>
-                          </div>
-                        </div>
-
-                        {activeLocks.length > 0 && (
-                          <div className="space-y-2">
-                            {activeLocks.map((tr: any) => (
-                              <div
-                                key={tr.id}
-                                className="bg-amber-50/60 border border-amber-100 rounded-2xl p-3 text-xs flex justify-between items-center gap-2"
-                              >
-                                <span className="font-bold text-amber-800">
-                                  🔒 ₪{tr.amountLocal.toFixed(2)} {t('pockets.lockedUntil')}
+                        <div className="space-y-3">
+                          {/* TWO accounts, like a bank: the pocket and the investing account.
+                              There are no transfers between them any more. */}
+                          {[
+                            {
+                              key: 'POCKET',
+                              emoji: '🍬',
+                              labelHe: 'חשבון כיס',
+                              value: accounts?.pocket?.balanceLocal ?? summary?.pocketLocal ?? 0,
+                              note: null as string | null,
+                            },
+                            {
+                              key: 'INVEST',
+                              emoji: '📈',
+                              labelHe: 'חשבון השקעות',
+                              value: accounts?.invest?.totalLocal ?? (summary?.investFundLocal ?? 0) + (summary?.stocksLocal ?? 0),
+                              note: `מזומן ₪${(accounts?.invest?.cashLocal ?? summary?.investFundLocal ?? 0).toFixed(2)} + מניות ₪${(accounts?.invest?.stocksLocal ?? summary?.stocksLocal ?? 0).toFixed(2)}`,
+                            },
+                          ].map((acc) => (
+                            <div
+                              key={acc.key}
+                              className={`rounded-2xl p-4 border ${
+                                acc.key === 'POCKET'
+                                  ? 'bg-emerald-50/60 border-emerald-100'
+                                  : 'bg-indigo-50/60 border-indigo-100'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold uppercase text-slate-600">
+                                  {acc.emoji} {acc.labelHe}
                                 </span>
-                                <span className="font-extrabold text-amber-900">
-                                  {daysLeftFor(tr.lockedUntil)} {t('pockets.days')}
-                                </span>
+                                <span className="text-lg font-extrabold text-slate-900">₪{acc.value.toFixed(2)}</span>
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              {acc.note && <p className="text-[10px] font-bold text-slate-500 mt-1">{acc.note}</p>}
+                            </div>
+                          ))}
 
-                        {selectedProfile.transfersEnabled === true ? (
-                          <div className="space-y-2">
-                            <button
-                              onClick={() => setShowTransfer(true)}
-                              disabled={(summary.pocketLocal ?? 0) < 10}
-                              className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
-                            >
-                              🏦 {t('pockets.moveToFund')}
-                            </button>
-                            <button
-                              onClick={async () => {
-                                const res = await fetch(
-                                  `/api/profiles/${encodeURIComponent(selectedProfile.name)}/withdraw-to-pocket`,
-                                  { method: 'POST' }
-                                );
-                                const d = await res.json();
-                                setSuccessText(null);
-                                setErrorText(d.error || 'Invested money stays invested!');
-                              }}
-                              className="w-full px-4 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 font-bold text-[11px] rounded-xl transition-all cursor-pointer"
-                            >
-                              🔒 {t('pockets.tryWithdraw')}
-                            </button>
-                            <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">{t('pockets.valveNote')}</p>
-                          </div>
-                        ) : (
-                          <p className="text-[11px] text-slate-500 font-semibold bg-slate-50 border border-slate-200/60 rounded-2xl p-3 leading-relaxed">
-                            {t('pockets.notYetEnabled')}
+                          <p className="text-[11px] font-semibold text-slate-500 bg-slate-50 border border-slate-200/60 rounded-2xl p-3 leading-relaxed">
+                            אין העברות בין החשבונות. קונים מניות מהכיס או מהקרן — ובמכירה הכסף חוזר לחשבון שממנו הוא בא. 🧩
                           </p>
-                        )}
+                        </div>
                       </div>
                     </div>
 
@@ -1237,6 +1249,31 @@ export default function App() {
                               </p>
 
                               <div className="space-y-4">
+                                {/* Which account pays? Money never moves between them. */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  {[
+                                    { key: 'POCKET', emoji: '🍬', label: 'מהכיס', available: accountCash('POCKET') },
+                                    { key: 'FUND', emoji: '📈', label: 'מהקרן', available: accountCash('FUND') },
+                                  ].map((opt) => (
+                                    <button
+                                      key={opt.key}
+                                      onClick={() => setBudgetSource(opt.key as 'POCKET' | 'FUND')}
+                                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                                        budgetSource === opt.key
+                                          ? 'border-emerald-500 bg-emerald-50/70 shadow-sm'
+                                          : 'border-slate-200 bg-white hover:border-slate-300'
+                                      }`}
+                                    >
+                                      <div className="text-[11px] font-extrabold text-slate-800">
+                                        {opt.emoji} {opt.label}
+                                      </div>
+                                      <div className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                        יש ₪{opt.available.toFixed(2)}
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+
                                 <div className="relative">
                                   <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪/$$</span>
                                   <input
@@ -1266,10 +1303,19 @@ export default function App() {
 
                                 <button
                                   onClick={() => setShowPinPad('trade_buy')}
-                                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
+                                  disabled={parseFloat(tradeAmountLocal || '0') > accountCash(budgetSource)}
+                                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
                                 >
                                   {t('stocks.confirmBuy')}
                                 </button>
+                                <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
+                                  {budgetSource === 'POCKET'
+                                    ? 'קונה מהכיס — הכסף יוצא מחשבון הכיס.'
+                                    : 'קונה מהקרן — הכסף יוצא מחשבון ההשקעות.'}
+                                  {parseFloat(tradeAmountLocal || '0') > accountCash(budgetSource) && (
+                                    <span className="text-rose-500"> אין מספיק כסף בחשבון הזה.</span>
+                                  )}
+                                </p>
                               </div>
                             </div>
 
@@ -1284,25 +1330,101 @@ export default function App() {
                               </p>
 
                               <div className="space-y-4">
-                                <div className="flex gap-2">
-                                  {[25, 50, 100].map((pct) => (
-                                    <button
-                                      key={pct}
-                                      onClick={() => setSellPercentage(pct)}
-                                      className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                                        sellPercentage === pct
-                                          ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-100'
-                                          : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
-                                      }`}
-                                    >
-                                      {pct}% {pct === 100 ? t('stocks.all') : ''}
-                                    </button>
-                                  ))}
-                                </div>
+                                {/* He picks the exact lots HE bought — each shows its own result. */}
+                                {openLotsOfTicker(selectedStock.ticker).length === 0 ? (
+                                  <p className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200/60 rounded-2xl p-3">
+                                    אין לך עדיין עסקאות של {selectedStock.ticker} למכירה.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <div className="flex justify-between items-center">
+                                      <span className="text-[10px] font-bold uppercase text-slate-500">
+                                        בחר את העסקאות למכירה
+                                      </span>
+                                      <button
+                                        onClick={() => {
+                                          const ids = openLotsOfTicker(selectedStock.ticker).map((l) => l.id);
+                                          setSelectedLotIds(selectedLotIds.length === ids.length ? [] : ids);
+                                        }}
+                                        className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                                      >
+                                        {selectedLotIds.length === openLotsOfTicker(selectedStock.ticker).length
+                                          ? 'נקה בחירה'
+                                          : 'בחר הכול'}
+                                      </button>
+                                    </div>
+
+                                    <div className="space-y-2 max-h-56 overflow-y-auto">
+                                      {openLotsOfTicker(selectedStock.ticker).map((lot) => {
+                                        const picked = selectedLotIds.includes(lot.id);
+                                        const isProfit = (lot.gainLossUsd || 0) >= 0;
+                                        return (
+                                          <button
+                                            key={lot.id}
+                                            onClick={() =>
+                                              setSelectedLotIds(
+                                                picked
+                                                  ? selectedLotIds.filter((id) => id !== lot.id)
+                                                  : [...selectedLotIds, lot.id]
+                                              )
+                                            }
+                                            className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer ${
+                                              picked
+                                                ? 'border-indigo-500 bg-indigo-50/60'
+                                                : 'border-slate-200 bg-white hover:border-slate-300'
+                                            }`}
+                                          >
+                                            <div className="flex justify-between items-center gap-2">
+                                              <span className="text-[11px] font-extrabold text-slate-800">
+                                                {picked ? '☑' : '☐'} ₪{lot.principalLocal.toFixed(2)} ·{' '}
+                                                {new Date(lot.acquiredAt).toLocaleDateString()}
+                                                <span className="text-[9px] font-bold text-slate-400">
+                                                  {' '}
+                                                  {lot.fundingSource === 'POCKET' ? 'מהכיס' : 'מהקרן'}
+                                                </span>
+                                              </span>
+                                              <span
+                                                className={`text-[11px] font-extrabold ${
+                                                  isProfit ? 'text-emerald-600' : 'text-rose-600'
+                                                }`}
+                                              >
+                                                {isProfit ? '+' : ''}
+                                                {money(lot.gainLossUsd || 0)} ({lot.gainLossPercent}%)
+                                              </span>
+                                            </div>
+                                            <div className="text-[9px] font-bold text-slate-400 mt-0.5">
+                                              {lot.shares.toFixed(4)} מניות · שווי עכשיו {money(lot.currentValueUsd)}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {selectedLots.length > 0 && (
+                                      <div className="bg-white border border-slate-200 rounded-2xl p-3 text-[11px] font-bold text-slate-600 space-y-0.5">
+                                        <div>
+                                          נבחרו {selectedLots.length} עסקאות · קרן ₪
+                                          {selectedLotsTotals.principal.toFixed(2)}
+                                        </div>
+                                        <div>תקבל עכשיו {money(selectedLotsTotals.value)}</div>
+                                        <div
+                                          className={
+                                            selectedLotsTotals.gain >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                          }
+                                        >
+                                          {selectedLotsTotals.gain >= 0 ? 'רווח' : 'הפסד'}{' '}
+                                          {money(Math.abs(selectedLotsTotals.gain))} — הבנק של אבא{' '}
+                                          {selectedLotsTotals.gain >= 0 ? 'ישלים' : 'יספוג'}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
 
                                 <button
                                   onClick={() => setShowPinPad('trade_sell')}
-                                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
+                                  disabled={selectedLots.length === 0}
+                                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
                                 >
                                   {t('stocks.confirmSell')}
                                 </button>
@@ -1451,6 +1573,228 @@ export default function App() {
                   </motion.div>
                 )}
 
+                {/* 3b. MY ACCOUNT — the bank statement (Hebrew, two accounts) + the lots */}
+                {activeTab === 'account' && (
+                  <motion.div
+                    key="tab-account"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="space-y-6"
+                  >
+                    {!statement ? (
+                      <div className="bg-white rounded-[32px] p-12 border border-slate-200/80 shadow-sm text-center">
+                        <Wallet className="w-16 h-16 text-slate-300 mx-auto mb-4 animate-pulse" />
+                        <p className="text-sm font-bold text-slate-500">טוען את החשבון מהספר…</p>
+                      </div>
+                    ) : statement.error ? (
+                      <div className="bg-white rounded-[32px] p-8 border border-rose-200 shadow-sm text-center">
+                        <p className="text-sm font-bold text-rose-600">⚠️ {statement.error}</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* The TWO accounts */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(statement.accounts || []).map((acc: any) => (
+                            <button
+                              key={acc.key}
+                              onClick={() => setStatementSection(acc.key)}
+                              className={`text-left rounded-[32px] p-6 border shadow-sm transition-all cursor-pointer ${
+                                statementSection === acc.key
+                                  ? 'border-indigo-400 bg-indigo-50/50'
+                                  : 'border-slate-200/80 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start gap-3">
+                                <div>
+                                  <p className="text-sm font-extrabold text-slate-800">
+                                    {acc.key === 'POCKET' ? '🍬' : '📈'} {acc.labelHe}
+                                  </p>
+                                  {acc.key === 'INVEST' && (
+                                    <p className="text-[10px] font-bold text-slate-500 mt-1">
+                                      מזומן ₪{Number(acc.cashLocal || 0).toFixed(2)} + מניות ₪
+                                      {Number(acc.stocksLocal || 0).toFixed(2)}
+                                    </p>
+                                  )}
+                                </div>
+                                <p className="text-2xl font-extrabold text-slate-900">
+                                  ₪{Number(acc.balanceLocal || 0).toFixed(2)}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+
+                        {!statement.reconciled && (
+                          <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-2xl p-4">
+                            ⚠️ החשבון לא מסתדר באגורה עם הספר — עד שזה יסתדר לא מציגים את המספרים.
+                          </p>
+                        )}
+
+                        {/* Movements with a running balance */}
+                        <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm">
+                          <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
+                            <h3 className="text-xl font-extrabold text-slate-900">
+                              תנועות בחשבון {statementSection === 'POCKET' ? 'הכיס 🍬' : 'ההשקעות 📈'}
+                            </h3>
+                            <button
+                              onClick={() => setStatementShowAll(!statementShowAll)}
+                              className="text-[11px] font-extrabold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                            >
+                              {statementShowAll ? 'הצג 3 חודשים אחרונים' : `הצג הכול (${(statement.movements || []).length})`}
+                            </button>
+                          </div>
+
+                          {/* month by month */}
+                          <div className="flex gap-2 overflow-x-auto pb-3 mb-4">
+                            {(statement.monthly || [])
+                              .filter((m: any) => m.section === statementSection)
+                              .filter((m: any) => statementShowAll || m.month >= threeMonthsAgo().slice(0, 7))
+                              .slice(-10)
+                              .map((m: any) => (
+                                <div key={m.month} className="shrink-0 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2">
+                                  <p className="text-[10px] font-extrabold text-slate-500">{m.month}</p>
+                                  <p className="text-[10px] font-bold text-emerald-600">+₪{Number(m.inLocal).toFixed(2)}</p>
+                                  <p className="text-[10px] font-bold text-rose-500">−₪{Math.abs(Number(m.outLocal)).toFixed(2)}</p>
+                                  <p className="text-[10px] font-extrabold text-slate-700">
+                                    ₪{Number(m.endBalanceLocal).toFixed(2)}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
+
+                          <div className="space-y-2 max-h-[560px] overflow-y-auto">
+                            {(statement.movements || [])
+                              .filter((m: any) => m.section === statementSection)
+                              .filter((m: any) => statementShowAll || !m.date || m.date >= threeMonthsAgo())
+                              .slice()
+                              .reverse()
+                              .slice(0, 200)
+                              .map((m: any, idx: number) => (
+                                <div
+                                  key={`${m.journalId}-${idx}-${m.kind}`}
+                                  className="flex justify-between items-center gap-3 p-3 rounded-2xl bg-slate-50/60 border border-slate-100"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-extrabold text-slate-800 truncate">
+                                      {kindEmoji(m.kind)} {m.labelHe}
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-400">{m.date || '—'}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p
+                                      className={`text-[12px] font-extrabold ${
+                                        m.amountLocal >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                                      }`}
+                                    >
+                                      {m.amountLocal >= 0 ? '+' : '−'}₪{Math.abs(m.amountLocal).toFixed(2)}
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-500">
+                                      יתרה ₪{Number(m.balanceLocal || 0).toFixed(2)}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+
+                          <p className="text-[10px] font-bold text-slate-400 mt-4 leading-relaxed">
+                            כל תנועה מגיעה מהספר (Firefly III). היתרה בכל שורה היא מה שהיה בחשבון אחרי אותה תנועה.
+                          </p>
+                        </div>
+
+                        {/* The lots — every purchase on its own */}
+                        <div className="bg-white rounded-[32px] p-8 border border-slate-200/80 shadow-sm">
+                          <h3 className="text-xl font-extrabold text-slate-900 mb-1">העסקאות שלי 🧩</h3>
+                          <p className="text-xs font-semibold text-slate-500 mb-5">
+                            כל קנייה היא עסקה נפרדת עם שם משלה. רואים בדיוק איך כל אחת מרוויחה או מפסידה.
+                          </p>
+
+                          {lots.filter((l) => l.status === 'OPEN').length === 0 ? (
+                            <p className="text-sm font-bold text-slate-400 text-center py-8">
+                              אין לך עסקאות פתוחות כרגע.
+                            </p>
+                          ) : (
+                            <div className="space-y-3">
+                              {lots
+                                .filter((l) => l.status === 'OPEN')
+                                .sort((a, b) => String(a.acquiredAt).localeCompare(String(b.acquiredAt)))
+                                .map((lot: any) => {
+                                  const isProfit = (lot.gainLossUsd || 0) >= 0;
+                                  return (
+                                    <div
+                                      key={lot.id}
+                                      className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50/40"
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <span className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-lg">
+                                          {stocks.find((s) => s.ticker === lot.ticker)?.logo || '⭐'}
+                                        </span>
+                                        <div>
+                                          <p className="text-sm font-extrabold text-slate-800">
+                                            {lot.ticker}
+                                            <span className="text-[10px] font-bold text-slate-400">
+                                              {' '}
+                                              · {new Date(lot.acquiredAt).toLocaleDateString()} ·{' '}
+                                              {lot.fundingSource === 'POCKET' ? 'נקנה מהכיס 🍬' : 'נקנה מהקרן 📈'}
+                                            </span>
+                                          </p>
+                                          <p className="text-[10px] font-bold text-slate-500">
+                                            {lot.shares.toFixed(4)} מניות · קרן ₪{lot.principalLocal.toFixed(2)} · מחיר קנייה $
+                                            {lot.priceUsdAtBuy.toFixed(2)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-sm font-extrabold text-slate-800">{money(lot.currentValueUsd)}</p>
+                                        <p
+                                          className={`text-[11px] font-extrabold ${
+                                            isProfit ? 'text-emerald-600' : 'text-rose-600'
+                                          }`}
+                                        >
+                                          {isProfit ? '+' : ''}
+                                          {money(lot.gainLossUsd)} ({lot.gainLossPercent}%)
+                                        </p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          )}
+
+                          {lots.filter((l) => l.status === 'CLOSED').length > 0 && (
+                            <div className="mt-6">
+                              <p className="text-[11px] font-extrabold uppercase text-slate-400 mb-3">
+                                עסקאות שנמכרו
+                              </p>
+                              <div className="space-y-2">
+                                {lots
+                                  .filter((l) => l.status === 'CLOSED')
+                                  .map((lot: any) => {
+                                    const isProfit = (lot.realizedPnlLocal || 0) >= 0;
+                                    return (
+                                      <div
+                                        key={lot.id}
+                                        className="flex justify-between items-center p-3 rounded-2xl bg-slate-50/60 border border-slate-100 text-[11px] font-bold text-slate-600"
+                                      >
+                                        <span>
+                                          💵 {lot.ticker} · נמכר {String(lot.closedAt || '').slice(0, 10)}
+                                        </span>
+                                        <span className={isProfit ? 'text-emerald-600' : 'text-rose-600'}>
+                                          {isProfit ? '+' : ''}
+                                          ₪{Number(lot.realizedPnlLocal || 0).toFixed(2)}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                )}
+
                 {/* 4. SETTINGS / PARENTS MODERATION TAB */}
                 {activeTab === 'settings' && (
                   <motion.div
@@ -1582,15 +1926,11 @@ export default function App() {
                 ? `${t('pinPad.loginTitle')} ${targetProfileToLogin?.name || 'Vault'}`
                 : showPinPad === 'trade_buy'
                 ? t('pinPad.buyTitle')
-                : showPinPad === 'transfer'
-                ? t('pinPad.transferTitle')
                 : t('pinPad.sellTitle')
             }
             subtitle={
               showPinPad === 'login'
                 ? t('pinPad.enterPin')
-                : showPinPad === 'transfer'
-                ? `${t('pinPad.authorizing')} ${transferAmount} ₪ (${transferLockDays} ${t('pockets.days')})`
                 : `${t('pinPad.authorizing')} ${selectedStock?.ticker}`
             }
             onVerify={handlePinPadVerify}
@@ -1599,104 +1939,6 @@ export default function App() {
               setTargetProfileToLogin(null);
             }}
           />
-        )}
-      </AnimatePresence>
-
-      {/* Pocket money → invest fund transfer (with a "promise" lock window) */}
-      <AnimatePresence>
-        {showTransfer && selectedProfile && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
-              className="bg-white rounded-[32px] p-8 max-w-lg w-full shadow-2xl space-y-5"
-            >
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-xl font-extrabold text-slate-900">{t('pockets.transferTitle')}</h3>
-                  <p className="text-xs font-semibold text-slate-500 mt-1">{t('pockets.transferDesc')}</p>
-                </div>
-                <button
-                  onClick={() => setShowTransfer(false)}
-                  className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 flex justify-between items-center">
-                <span className="text-xs font-bold text-emerald-800">{t('dashboard.pocketMoney')}</span>
-                <span className="text-lg font-extrabold text-emerald-900">₪{(summary.pocketLocal ?? 0).toFixed(2)}</span>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase text-slate-500">{t('pockets.amount')}</label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪</span>
-                  <input
-                    type="number"
-                    min={10}
-                    value={transferAmount}
-                    onChange={(e) => setTransferAmount(e.target.value)}
-                    className="w-full pl-9 pr-3 py-3 bg-slate-50 border border-slate-200 rounded-xl font-extrabold text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  {[10, 20, 50].map((amt) => (
-                    <button
-                      key={amt}
-                      onClick={() => setTransferAmount(String(amt))}
-                      className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-bold text-slate-600 cursor-pointer"
-                    >
-                      ₪{amt}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-bold uppercase text-slate-500">{t('pockets.promise')}</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { days: 30, emoji: '🐣', label: t('pockets.lock30') },
-                    { days: 90, emoji: '🥉', label: t('pockets.lock90') },
-                    { days: 365, emoji: '🥇', label: t('pockets.lock365') },
-                  ].map((opt) => (
-                    <button
-                      key={opt.days}
-                      onClick={() => setTransferLockDays(opt.days)}
-                      className={`p-3 rounded-2xl border text-center transition-all cursor-pointer ${
-                        transferLockDays === opt.days
-                          ? 'border-emerald-500 bg-emerald-50/70 shadow-sm'
-                          : 'border-slate-200 bg-slate-50/40 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="text-2xl">{opt.emoji}</div>
-                      <div className="text-[10px] font-extrabold text-slate-700 mt-1">{opt.label}</div>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] font-semibold text-slate-500 leading-relaxed">{t('pockets.promiseNote')}</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  setShowTransfer(false);
-                  setShowPinPad('transfer');
-                }}
-                disabled={!(parseFloat(transferAmount) >= 10)}
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-sm rounded-2xl shadow-md transition-all cursor-pointer"
-              >
-                {t('pockets.confirm')}
-              </button>
-            </motion.div>
-          </motion.div>
         )}
       </AnimatePresence>
 
