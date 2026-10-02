@@ -2,143 +2,98 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Trade + transfer rules — the arithmetic that moves the kids' money.
- * If one of these fails, the ledger and the portfolio would disagree.
+ * Trade rules — the arithmetic that moves the kids' money. If one of these
+ * fails, the ledger and the portfolio would disagree.
+ *
+ * 2026-10-02: the old weighted-average planBuy/planLiquidation pair was replaced
+ * by lots (see test/lots.test.ts). What stays here is the buy guardrail and the
+ * funding-source check, which is what still protects the pocket.
  */
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { planBuy, planLiquidation, planLiquidationTransfers } from '../src/server/rules.js';
-import type { Holding } from '../src/types.js';
-
-const holding = (overrides: Partial<Holding> = {}): Holding => ({
-  profileName: 'נתנאל',
-  ticker: 'SPY',
-  shares: 0.3,
-  averagePriceUsd: 100,
-  originalPrincipalUsd: 30,
-  lastUpdated: '2026-09-01T00:00:00.000Z',
-  ...overrides,
-});
+import { MIN_ORDER_LOCAL, planBuy, validateBuyFunds } from '../src/server/rules.js';
 
 describe('planBuy', () => {
   test('rejects an order below the minimum size', () => {
-    const result = planBuy({ profileName: 'נתנאל', ticker: 'SPY', amountLocal: 5, priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
+    const result = planBuy({ ticker: 'SPY', amountLocal: 5, priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
     assert.equal(result.ok, false);
     assert.match(result.error!, /Minimum order size/);
+    assert.equal(MIN_ORDER_LOCAL, 10);
   });
 
   test('rejects a slice smaller than 0.01 shares', () => {
-    const result = planBuy({ profileName: 'נתנאל', ticker: 'SPY', amountLocal: 10, priceUsd: 5000, currencyMode: 'PARITY', fxRate: 1 });
+    const result = planBuy({ ticker: 'SPY', amountLocal: 10, priceUsd: 5000, currencyMode: 'PARITY', fxRate: 1 });
     assert.equal(result.ok, false);
     assert.match(result.error!, /fraction below/);
   });
 
   test('buys shares at parity (₪1 = $1)', () => {
-    const result = planBuy({ profileName: 'נתנאל', ticker: 'NKE', amountLocal: 20, priceUsd: 40, currencyMode: 'PARITY', fxRate: 1 });
+    const result = planBuy({ ticker: 'NKE', amountLocal: 20, priceUsd: 40, currencyMode: 'PARITY', fxRate: 1 });
     assert.equal(result.ok, true);
     assert.equal(result.value!.shares, 0.5);
-    assert.equal(result.value!.holding.shares, 0.5);
-    assert.equal(result.value!.holding.originalPrincipalUsd, 20);
-    assert.equal(result.value!.holding.averagePriceUsd, 40);
+    assert.equal(result.value!.investLocal, 20);
+    assert.equal(result.value!.investUsd, 20);
   });
 
-  test('merges into an existing position with a weighted average price', () => {
-    const result = planBuy({
-      profileName: 'נתנאל',
+  test('converts the local amount with the FX rate in REAL mode', () => {
+    const result = planBuy({ ticker: 'SPY', amountLocal: 50, priceUsd: 100, currencyMode: 'REAL', fxRate: 0.5 });
+    assert.equal(result.ok, true);
+    assert.equal(result.value!.shares, 0.25, '50 * 0.5 = $25 → 0.25 shares');
+    assert.equal(result.value!.investUsd, 25);
+  });
+
+  test('defaults the funding source to the invest fund and remembers the pocket when asked', () => {
+    const fromFund = planBuy({ ticker: 'SPY', amountLocal: 20, priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
+    assert.equal(fromFund.value!.fundingSource, 'FUND');
+    assert.equal(fromFund.value!.sourceAccountRole, 'savings');
+
+    const fromPocket = planBuy({
       ticker: 'SPY',
       amountLocal: 20,
       priceUsd: 100,
       currencyMode: 'PARITY',
       fxRate: 1,
-      existingHolding: holding(),
+      fundingSource: 'POCKET',
     });
-    assert.equal(result.ok, true);
-    assert.equal(result.value!.holding.shares, 0.5, '0.3 + 0.2');
-    assert.equal(result.value!.holding.originalPrincipalUsd, 50, '30 + 20');
-    assert.equal(result.value!.holding.averagePriceUsd, 100);
+    assert.equal(fromPocket.value!.fundingSource, 'POCKET');
+    assert.equal(fromPocket.value!.sourceAccountRole, 'spending', 'the pocket account pays');
   });
 
-  test('converts the local amount with the FX rate in REAL mode', () => {
-    const result = planBuy({ profileName: 'Ron', ticker: 'SPY', amountLocal: 50, priceUsd: 100, currencyMode: 'REAL', fxRate: 0.5 });
-    assert.equal(result.ok, true);
-    assert.equal(result.value!.shares, 0.25, '50 * 0.5 = $25 → 0.25 shares');
-    assert.equal(result.value!.holding.originalPrincipalUsd, 25);
+  test('rejects a nonsense amount instead of coercing it', () => {
+    const result = planBuy({ ticker: 'SPY', amountLocal: Number('abc'), priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
+    assert.equal(result.ok, false);
   });
 });
 
-describe('planLiquidation', () => {
-  test('rejects a percentage outside 1-100', () => {
-    assert.equal(planLiquidation({ percentage: 0, holding: holding(), priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 }).ok, false);
-    assert.equal(planLiquidation({ percentage: 150, holding: holding(), priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 }).ok, false);
+describe('validateBuyFunds (you can only spend what is already there)', () => {
+  test('allows a purchase the chosen account can cover', () => {
+    const pocket = validateBuyFunds({ fundingSource: 'POCKET', amountLocal: 100, pocketLocal: 189.09, fundLocal: 61.69 });
+    assert.equal(pocket.ok, true);
+    assert.equal(pocket.value!.availableLocal, 189.09);
+
+    const fund = validateBuyFunds({ fundingSource: 'FUND', amountLocal: 60, pocketLocal: 189.09, fundLocal: 61.69 });
+    assert.equal(fund.ok, true);
+    assert.equal(fund.value!.availableLocal, 61.69);
   });
 
-  test('a break-even sale returns exactly the principal', () => {
-    const result = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
-    assert.equal(result.ok, true);
-    assert.equal(result.value!.sharesToSell, 0.3);
-    assert.equal(result.value!.deltaLocal, 0);
-    assert.equal(result.value!.isGain, true);
-    assert.equal(result.value!.fundReturnLocal, 30);
+  test('refuses to spend more than the chosen account holds — no money is moved to cover it', () => {
+    const tooMuchFromFund = validateBuyFunds({ fundingSource: 'FUND', amountLocal: 70, pocketLocal: 189.09, fundLocal: 61.69 });
+    assert.equal(tooMuchFromFund.ok, false);
+    assert.match(tooMuchFromFund.error!, /61\.69/);
+
+    const tooMuchFromPocket = validateBuyFunds({ fundingSource: 'POCKET', amountLocal: 200, pocketLocal: 189.09, fundLocal: 5000 });
+    assert.equal(tooMuchFromPocket.ok, false, 'the fund cannot cover a pocket purchase');
+    assert.match(tooMuchFromPocket.error!, /189\.09/);
   });
 
-  test('a winning sale returns the principal; the profit comes from Dad', () => {
-    const result = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 110, currencyMode: 'PARITY', fxRate: 1 });
-    assert.equal(result.value!.currentValueLocal, 33);
-    assert.equal(result.value!.deltaLocal, 3);
-    assert.equal(result.value!.isGain, true);
-    assert.equal(result.value!.fundReturnLocal, 30, 'principal only');
+  test('allows spending the account down to zero — there is no ₪10 pocket buffer any more', () => {
+    const all = validateBuyFunds({ fundingSource: 'POCKET', amountLocal: 189.09, pocketLocal: 189.09, fundLocal: 0 });
+    assert.equal(all.ok, true);
   });
 
-  test('a losing sale returns only the current value; the loss goes to Dad', () => {
-    const result = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 90, currencyMode: 'PARITY', fxRate: 1 });
-    assert.equal(result.value!.currentValueLocal, 27);
-    assert.equal(result.value!.deltaLocal, -3);
-    assert.equal(result.value!.isGain, false);
-    assert.equal(result.value!.fundReturnLocal, 27);
-  });
-
-  test('a partial liquidation sells the same slice of shares and principal', () => {
-    const result = planLiquidation({ percentage: 50, holding: holding(), priceUsd: 120, currencyMode: 'PARITY', fxRate: 1 });
-    assert.equal(result.value!.sharesToSell, 0.15);
-    assert.equal(result.value!.principalUsd, 15);
-    assert.equal(result.value!.currentUsd, 18);
-    assert.equal(result.value!.deltaLocal, 3);
-  });
-
-  test('REAL mode converts USD to the kid currency', () => {
-    const result = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 100, currencyMode: 'REAL', fxRate: 0.5 });
-    assert.equal(result.value!.principalLocal, 60, '30 USD / 0.5 = 60 ILS');
-    assert.equal(result.value!.currentValueLocal, 60);
-  });
-});
-
-describe('planLiquidationTransfers (the three-legged double entry)', () => {
-  const accounts = { fundAccountId: '6', investmentAccountId: '26', dadAccountId: '25' };
-
-  test('a gain: principal investment→fund, profit Dad→fund', () => {
-    const value = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 110, currencyMode: 'PARITY', fxRate: 1 }).value!;
-    const transfers = planLiquidationTransfers(value, accounts);
-    assert.deepEqual(transfers.principal, { amount: 30, from: '26', to: '6' });
-    assert.deepEqual(transfers.adjustment, { amount: 3, from: '25', to: '6', kind: 'profit' });
-  });
-
-  test('a loss: value investment→fund, loss investment→Dad', () => {
-    const value = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 90, currencyMode: 'PARITY', fxRate: 1 }).value!;
-    const transfers = planLiquidationTransfers(value, accounts);
-    assert.deepEqual(transfers.principal, { amount: 27, from: '26', to: '6' });
-    assert.deepEqual(transfers.adjustment, { amount: 3, from: '26', to: '25', kind: 'loss' });
-  });
-
-  test('a break-even sale creates no adjustment (Firefly rejects zero amounts)', () => {
-    const value = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 }).value!;
-    const transfers = planLiquidationTransfers(value, accounts);
-    assert.equal(transfers.adjustment, undefined);
-  });
-
-  test('a sub-agora gain is ignored rather than sent to Firefly', () => {
-    const value = planLiquidation({ percentage: 100, holding: holding(), priceUsd: 100.001, currencyMode: 'PARITY', fxRate: 1 }).value!;
-    const transfers = planLiquidationTransfers(value, accounts);
-    assert.equal(transfers.adjustment, undefined);
+  test('rejects a zero or negative amount', () => {
+    assert.equal(validateBuyFunds({ fundingSource: 'FUND', amountLocal: 0, pocketLocal: 10, fundLocal: 10 }).ok, false);
+    assert.equal(validateBuyFunds({ fundingSource: 'FUND', amountLocal: -5, pocketLocal: 10, fundLocal: 10 }).ok, false);
   });
 });

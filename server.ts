@@ -12,14 +12,27 @@ import { MarketService, STOCK_CATEGORIES } from './src/server/alpaca.js';
 import { LedgerService } from './src/server/firefly.js';
 import {
   planBuy,
-  planLiquidation,
-  validateTransfer,
+  validateBuyFunds,
   summarizePockets,
   localDateString,
   MIN_ORDER_LOCAL,
 } from './src/server/rules.js';
+import {
+  aggregateLots,
+  closeLot,
+  newLot,
+  openLots,
+  planLotSales,
+  summarizeLots,
+} from './src/server/lots.js';
+import {
+  classifyStatement,
+  monthlyStatement,
+  withRunningBalances,
+  STATEMENT_LABELS_HE,
+} from './src/server/ledger-rules.js';
 import { AIService } from './src/server/ai.js';
-import { TradeRequest, TradeResponse } from './src/types.js';
+import { FundingSource, TradeRequest, TradeResponse } from './src/types.js';
 
 const PORT = 3000;
 
@@ -141,7 +154,11 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'Profile not found.' });
       }
 
-      const holdings = Database.getHoldings(profileName);
+      // Lots are the source of truth once a profile has any: the aggregate row
+      // the dashboard shows is derived from them and lots are never merged.
+      const storedLots = Database.getLots(profileName);
+      const hasLots = storedLots.length > 0;
+      const holdings = hasLots ? aggregateLots(storedLots, profileName) : Database.getHoldings(profileName);
       const fxRate = await MarketService.getILSExchangeRate();
 
       // Live financial breakdown from Firefly III: the three pockets
@@ -161,7 +178,9 @@ async function startServer() {
             const quote = await MarketService.getStockQuote(h.ticker);
             const currentValueUsd = h.shares * quote.priceUsd;
             totalStockValueUsd += currentValueUsd;
-            const originalValueUsd = h.shares * h.averagePriceUsd;
+            // The money invested in a position is its principal — not
+            // shares × a rounded average price (that drift is what lots removed).
+            const originalValueUsd = h.originalPrincipalUsd;
             const gainLossPercent = ((currentValueUsd - originalValueUsd) / (originalValueUsd || 1)) * 100;
 
             return {
@@ -216,14 +235,28 @@ async function startServer() {
 
       const transactions = Database.getTransactions(profileName);
       const snapshots = Database.getSnapshots(profileName);
-      const transfers = Database.getTransfers(profileName);
-      const nowMs = Date.now();
-      const lockedLocal = Number(
-        transfers
-          .filter((t) => new Date(t.lockedUntil).getTime() > nowMs)
-          .reduce((sum, t) => sum + t.amountLocal, 0)
-          .toFixed(2)
+
+      // Every lot with its own live result — the kid sells specific lots, so the
+      // UI must be able to show each one's profit/loss on its own.
+      const lotsWithValue = await Promise.all(
+        storedLots.map(async (lot) => {
+          try {
+            const quote = await MarketService.getStockQuote(lot.ticker);
+            const currentValueUsd = Number((lot.shares * quote.priceUsd).toFixed(2));
+            const gainLossUsd = Number((currentValueUsd - lot.principalUsd).toFixed(2));
+            return {
+              ...lot,
+              currentPriceUsd: quote.priceUsd,
+              currentValueUsd,
+              gainLossUsd,
+              gainLossPercent: lot.principalUsd > 0 ? Number(((gainLossUsd / lot.principalUsd) * 100).toFixed(2)) : 0,
+            };
+          } catch (e) {
+            return { ...lot, currentPriceUsd: lot.priceUsdAtBuy, currentValueUsd: lot.principalUsd, gainLossUsd: 0, gainLossPercent: 0 };
+          }
+        })
       );
+      const lotSummary = summarizeLots(storedLots, profileName);
 
       res.json({
         success: true,
@@ -258,9 +291,25 @@ async function startServer() {
         holdings: activeHoldings,
         transactions,
         snapshots,
-        transfers,
-        lockedLocal,
-        transfersEnabled: profile.transfersEnabled === true,
+        lots: lotsWithValue,
+        lotSummary,
+        // The kid sees TWO accounts: the pocket and the investing account
+        // (its liquid balance = the fund's cash + the stocks at their live value).
+        accounts: {
+          pocket: {
+            labelHe: 'חשבון כיס',
+            accountId: profile.spendingAccountId ?? null,
+            balanceLocal: pocketLocal,
+          },
+          invest: {
+            labelHe: 'חשבון השקעות',
+            fundAccountId: profile.savingsAccountId,
+            investmentAccountId: profile.investmentAccountId,
+            cashLocal: investFundLocal,
+            stocksLocal,
+            totalLocal: investedWorldLocal,
+          },
+        },
         financialsFetchedAt: financials?.fetchedAt ?? null,
       });
     } catch (err: any) {
@@ -321,9 +370,14 @@ async function startServer() {
   app.post('/api/trade', async (req, res) => {
     try {
       const { profileName, pin, ticker, type, amount } = req.body as TradeRequest;
+      const lotIds = (req.body as any).lotIds;
 
-      // Basic parameter validations
-      if (!profileName || !pin || !ticker || !type || amount === undefined) {
+      // Basic parameter validations. A BUY needs an amount; a SELL needs either an
+      // explicit lot selection or an amount (no selection = all lots of that stock).
+      const hasAmount = amount !== undefined && amount !== null;
+      // A SELL with an empty lotIds array means "all of his lots of that stock".
+      const sellIsSellable = Array.isArray(lotIds) || hasAmount;
+      if (!profileName || !pin || !ticker || !type || (type === 'SELL' ? !sellIsSellable : !hasAmount)) {
         return res.status(400).json({ success: false, error: 'Missing core trade execution parameters.' });
       }
 
@@ -342,55 +396,67 @@ async function startServer() {
       const fxRate = await MarketService.getILSExchangeRate();
       const fxFactor = profile.currencyMode === 'PARITY' ? 1.0 : fxRate;
 
-      // BUY Transaction Engine
+      // BUY Transaction Engine — one purchase = one lot, paid from the pocket or
+      // from the invest fund (the kid chooses; money never moves between them).
       if (type === 'BUY') {
-        const investFiat = amount;
+        const investFiat = Number(amount);
+        const fundingSource: FundingSource = (req.body as any).fundingSource === 'POCKET' ? 'POCKET' : 'FUND';
 
-        // 1. Guardrail: Minimum Order Size (see src/server/rules.ts)
-        if (investFiat < MIN_ORDER_LOCAL) {
-          return res.status(400).json({
-            success: false,
-            error: `Minimum order size is exactly ${MIN_ORDER_LOCAL} currency units! (You tried to buy with ${investFiat})`,
-          });
-        }
-
-        // Check cash balance from live Firefly III (fall back to local cache)
-        const liveBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
-        const currentCashLocal = liveBalance ?? Database.getCashBalance(profileName);
-        if (currentCashLocal < investFiat) {
-          return res.status(400).json({
-            success: false,
-            error: `Insufficient savings capital! You have ₪/$$ ${currentCashLocal.toFixed(2)} available.`,
-          });
-        }
-
-        // 2. Compute the trade with the shared, unit-tested rules
-        const existingHolding = Database.getHoldings(profileName).find(
-          (h) => h.ticker.toUpperCase() === ticker.toUpperCase()
-        );
+        // 1. All guardrails + arithmetic live in src/server/rules.ts
         const buyPlan = planBuy({
-          profileName,
           ticker,
           amountLocal: investFiat,
           priceUsd: quote.priceUsd,
           currencyMode: profile.currencyMode,
           fxRate,
-          existingHolding,
+          fundingSource,
         });
         if (!buyPlan.ok) {
           return res.status(400).json({ success: false, error: buyPlan.error });
         }
-        const { shares: sharesToAcquire, holding: newHolding } = buyPlan.value;
+        const { shares: sharesToAcquire, investUsd } = buyPlan.value;
 
-        // Ledger Transfer: savings to investments
+        // 2. Which account pays — and is the money already there? (The app never
+        //    moves money between the accounts to cover a purchase.)
+        const sourceAccountId =
+          buyPlan.value.sourceAccountRole === 'spending' ? profile.spendingAccountId : profile.savingsAccountId;
+        if (!sourceAccountId) {
+          return res.status(400).json({ success: false, error: 'לפרופיל הזה אין חשבון מתאים לקנייה.' });
+        }
+        const financials = await LedgerService.getFinancialBreakdown(profile);
+        const pocketLocal = financials?.accounts.checking?.balance ?? 0;
+        const fundLocal =
+          financials?.accounts.savings?.balance ??
+          (await LedgerService.getAccountBalance(profile.savingsAccountId)) ??
+          Database.getCashBalance(profileName);
+        const funds = validateBuyFunds({ fundingSource, amountLocal: investFiat, pocketLocal, fundLocal });
+        if (!funds.ok) {
+          return res.status(400).json({ success: false, error: funds.error });
+        }
+
+        // 3. Ledger: the chosen account → the investments account.
         const ffTxId = await LedgerService.createTransfer(
           investFiat,
-          `Stock Purchase: Buy ${sharesToAcquire.toFixed(4)} shares of ${ticker} (${quote.name})`,
-          profile.savingsAccountId,
+          `קניית ${sharesToAcquire.toFixed(4)} מניות ${ticker} (${quote.name}) ב-₪${investFiat.toFixed(2)} — `
+            + `${fundingSource === 'POCKET' ? 'מהכיס' : 'מקרן ההשקעות'} — ${profileName}`,
+          sourceAccountId,
           profile.investmentAccountId
         );
 
-        Database.saveHolding(newHolding);
+        // 4. The purchase becomes its own lot — lots are never merged.
+        const lot = Database.saveLot(
+          newLot({
+            profileName,
+            ticker,
+            shares: sharesToAcquire,
+            principalLocal: investFiat,
+            principalUsd: investUsd,
+            priceUsd: quote.priceUsd,
+            acquiredAt: new Date().toISOString(),
+            fundingSource,
+            fireflyTransactionId: ffTxId,
+          })
+        );
 
         // Log transaction
         const tx = Database.logTransaction({
@@ -405,55 +471,68 @@ async function startServer() {
         });
 
         // Keep local cache in sync with Firefly III for fallback resilience
-        Database.updateCashBalance(profileName, currentCashLocal - investFiat);
+        Database.updateCashBalance(profileName, fundLocal - (fundingSource === 'FUND' ? investFiat : 0));
         LedgerService.invalidateBreakdown(profileName);
 
+        const fromHe = fundingSource === 'POCKET' ? 'מהכיס 🍬' : 'מקרן ההשקעות 📈';
         return res.json({
           success: true,
-          message: `Yay! You successfully purchased ${sharesToAcquire.toFixed(4)} shares of ${ticker}!`,
+          message:
+            `כל הכבוד! קנית ${sharesToAcquire.toFixed(4)} מניות ${ticker} ב-₪${investFiat.toFixed(2)} ${fromHe}. `
+            + `זו עסקה נפרדת משלך — תראה בדיוק איך היא מרוויחה. 🧩`,
           transaction: tx,
+          lot,
         });
       }
 
-      // SELL Transaction Engine
+      // SELL Transaction Engine — the kid picks the lots HE bought; every sold lot
+      // returns its money to the account it came from (pocket or invest fund).
       if (type === 'SELL') {
-        const holdings = Database.getHoldings(profileName);
-        const currentHolding = holdings.find((h) => h.ticker.toUpperCase() === ticker.toUpperCase());
+        const requestedIds: string[] = Array.isArray((req.body as any).lotIds)
+          ? (req.body as any).lotIds.map((v: any) => String(v))
+          : [];
 
-        if (!currentHolding || currentHolding.shares <= 0.0) {
-          return res.status(400).json({ success: false, error: `You don't own any shares of ${ticker} to sell!` });
+        const open = openLots(Database.getLots(profileName), profileName, ticker);
+        if (open.length === 0) {
+          return res.status(400).json({ success: false, error: `אין לך מניות של ${ticker} למכירה.` });
         }
+        const unknown = requestedIds.filter((id) => !open.some((l) => l.id === id));
+        if (unknown.length) {
+          return res.status(400).json({ success: false, error: 'אחד המגרשים שבחרת כבר לא זמין — רענן את הדף ונסה שוב.' });
+        }
+        // No explicit selection = sell everything he owns of this stock.
+        const selected = requestedIds.length ? open.filter((l) => requestedIds.includes(l.id)) : open;
 
-        // Amount represents either percentage (0-100) or shares to sell
-        // We will default to liquidating ALL shares (100%) for child simplicity, or supporting custom percentages
-        const pctToLiquidate = amount; // e.g. 100 means full liquidation
-
-        // All arithmetic + validation lives in src/server/rules.ts
-        const liquidationPlan = planLiquidation({
-          percentage: pctToLiquidate,
-          holding: currentHolding,
+        // All arithmetic + validation lives in src/server/lots.ts
+        const salePlan = planLotSales({
+          lots: selected,
           priceUsd: quote.priceUsd,
           currencyMode: profile.currencyMode,
           fxRate,
         });
-        if (!liquidationPlan.ok) {
-          return res.status(400).json({ success: false, error: liquidationPlan.error });
+        if (!salePlan.ok) {
+          return res.status(400).json({ success: false, error: salePlan.error });
         }
+        const { sales, totals } = salePlan.value;
 
-        const sharesToSell = liquidationPlan.value.sharesToSell;
-        const originalPrincipalUsd = liquidationPlan.value.principalUsd;
+        // One journal pair per lot (approved): the principal goes back to the
+        // account that lot came from, and only the gain/loss crosses Dad.
+        const journalIds: string[] = [];
+        for (const sale of sales) {
+          const lot = selected.find((l) => l.id === sale.lotId) as (typeof selected)[number];
+          const posted = await LedgerService.postLotSale({
+            sale,
+            kidName: profileName,
+            acquiredAt: lot.acquiredAt,
+            fundAccountId: profile.savingsAccountId,
+            pocketAccountId: profile.spendingAccountId || '',
+            investmentAccountId: profile.investmentAccountId,
+          });
+          journalIds.push(posted.principalTransferId);
+          if (posted.adjustmentTransferId) journalIds.push(posted.adjustmentTransferId);
 
-        // Execute Double-Entry Ledger through Dad's clearance
-        const clearance = await LedgerService.executeLiquidationDoubleEntry({
-          ticker,
-          shares: sharesToSell,
-          currentPriceUsd: quote.priceUsd,
-          originalPrincipalUsd: originalPrincipalUsd,
-          savingsAccountId: profile.savingsAccountId,
-          investmentAccountId: profile.investmentAccountId,
-          currencyMode: profile.currencyMode,
-          fxRate: fxFactor,
-        });
+          Database.saveLot(closeLot({ lot, sale, closedAt: new Date().toISOString() }));
+        }
 
         // Keep local cache in sync with Firefly III for fallback resilience
         const sellBalance = await LedgerService.getAccountBalance(profile.savingsAccountId);
@@ -462,38 +541,38 @@ async function startServer() {
         }
         LedgerService.invalidateBreakdown(profileName);
 
-        const totalLiquidationUsd = sharesToSell * quote.priceUsd;
-        const totalLiquidationLocal = profile.currencyMode === 'PARITY' ? totalLiquidationUsd : (totalLiquidationUsd / fxFactor);
-
-        // Update holding
-        currentHolding.shares = Number((currentHolding.shares - sharesToSell).toFixed(4));
-        currentHolding.originalPrincipalUsd = Number((currentHolding.originalPrincipalUsd - originalPrincipalUsd).toFixed(2));
-        currentHolding.lastUpdated = new Date().toISOString();
-        Database.saveHolding(currentHolding);
-
         // Log transaction
         const tx = Database.logTransaction({
           profileName,
           ticker,
           type: 'SELL',
-          shares: Number(sharesToSell.toFixed(4)),
+          shares: Number(totals.shares.toFixed(4)),
           priceUsd: quote.priceUsd,
           fxRate: fxFactor,
-          fiatAmount: Number(totalLiquidationLocal.toFixed(2)),
-          fireflyTransactionId: clearance.principalTransferId,
+          fiatAmount: Number(totals.currentValueLocal.toFixed(2)),
+          fireflyTransactionId: journalIds[0] || '',
         });
 
-        const deltaRounded = Number(clearance.deltaValue.toFixed(2));
-        const gainMsg = deltaRounded > 0
-          ? clearance.isGain
-            ? `You earned ₪/$$ ${clearance.deltaValue.toFixed(2)} in profit from the Bank of Dad! 🎁`
-            : `Your losses of ₪/$$ ${clearance.deltaValue.toFixed(2)} were adjusted through Dad's clearance.`
-          : `You broke even — no profit or loss on this trade! Principal returned to savings. 📊`;
+        const destinations = new Set(sales.map((s) => s.destination));
+        const backHe =
+          destinations.size === 1
+            ? (sales[0].destination === 'POCKET' ? 'לכיס שלך 🍬' : 'לחשבון ההשקעות 📈')
+            : 'לחשבונות שמהם הן נקנו';
+        const resultHe =
+          totals.deltaLocal > 0
+            ? `הרווחת ₪${totals.deltaLocal.toFixed(2)} — הבנק של אבא השלים לך 🎁`
+            : totals.deltaLocal < 0
+              ? `הפסדת ₪${Math.abs(totals.deltaLocal).toFixed(2)} — את זה סופג הבנק של אבא 😢`
+              : 'יצאת בדיוק באותו סכום — בלי רווח ובלי הפסד 📊';
 
         return res.json({
           success: true,
-          message: `Awesome! You sold ${sharesToSell.toFixed(4)} shares of ${ticker} for a total return of ₪/$$ ${totalLiquidationLocal.toFixed(2)}! ${gainMsg}`,
+          message:
+            `מכרת ${sales.length === 1 ? 'עסקה אחת' : `${sales.length} עסקאות`} של ${ticker} תמורת `
+            + `₪${totals.currentValueLocal.toFixed(2)}; הכסף חזר ${backHe}. ${resultHe}`,
           transaction: tx,
+          sales,
+          journalIds,
         });
       }
 
@@ -561,89 +640,107 @@ async function startServer() {
     }
   });
 
-  // 12. Pocket money → invest fund transfer (kid-initiated, PIN-protected)
-  app.post('/api/profiles/:name/transfer', async (req, res) => {
+  // 12. Bank statement ("החשבון שלי") — every movement in the kid's two accounts,
+  //     in Hebrew, with a running balance. Read-only.
+  //     NOTE (approved 2026-10-02): the pocket→fund transfer and the
+  //     withdraw-to-pocket lesson were REMOVED. Money cannot move between the
+  //     accounts; it enters the invest account by buying (from the pocket or the
+  //     fund) and leaves it by selling a lot, back to where it came from.
+  app.get('/api/ledger/:profileName/statement', async (req, res) => {
     try {
-      const { name } = req.params;
-      const { pin, amount, lockDays } = req.body as { pin?: string; amount?: number; lockDays?: number };
-
-      const profile = Database.getProfile(name);
+      const profile = Database.getProfile(req.params.profileName);
       if (!profile) return res.status(404).json({ success: false, error: 'Profile not found.' });
-      if (profile.transfersEnabled !== true) {
-        return res.status(403).json({
-          success: false,
-          error: 'Moving pocket money into the invest fund is not open for this profile yet.',
-        });
-      }
       if (!profile.spendingAccountId) {
-        return res.status(400).json({ success: false, error: 'No pocket-money account is linked to this profile.' });
-      }
-      if (!pin || !Database.verifyPin(profile.name, pin)) {
-        return res.status(401).json({ success: false, error: 'Incorrect 4-digit PIN! Authorization failed.' });
+        return res.status(400).json({ success: false, error: 'לפרופיל הזה אין חשבון כיס מקושר.' });
       }
 
-      const financials = await LedgerService.getFinancialBreakdown(profile);
-      const pocketBalance = financials?.accounts.checking?.balance ?? 0;
-
-      // All transfer rules live in src/server/rules.ts
-      const transferPlan = validateTransfer({
-        amountLocal: Number(amount),
-        pocketBalanceLocal: pocketBalance,
-        lockDays: Number(lockDays),
-      });
-      if (!transferPlan.ok) {
-        return res.status(400).json({ success: false, error: transferPlan.error });
+      const [pocket, fund, investments, accountsById] = await Promise.all([
+        LedgerService.getAccount(profile.spendingAccountId),
+        LedgerService.getAccount(profile.savingsAccountId),
+        LedgerService.getAccount(profile.investmentAccountId),
+        LedgerService.listAccounts(),
+      ]);
+      if (!pocket || !fund || !investments) {
+        return res.status(503).json({ success: false, error: 'הספר של Firefly לא זמין כרגע — נסו שוב בעוד רגע.' });
       }
-      const { amountLocal: transferAmountLocal, days, lockedUntil } = transferPlan.value;
 
-      const ffId = await LedgerService.createTransfer(
-        transferAmountLocal,
-        `Pocket money → invest fund (promised to keep ${days} days)`,
-        profile.spendingAccountId,
-        profile.savingsAccountId
+      const journals: any[] = [];
+      for (const account of [pocket, fund, investments]) {
+        journals.push(...(await LedgerService.getAccountJournals(account.id)));
+      }
+
+      const rows = withRunningBalances(
+        classifyStatement(journals, {
+          pocketId: pocket.id,
+          fundId: fund.id,
+          investmentId: investments.id,
+          dadAccountId: process.env.BANK_OF_DAD_ACCOUNT_ID || '25',
+          accountsById,
+          openingByAccount: {
+            [pocket.id]: pocket.openingBalance,
+            [fund.id]: fund.openingBalance,
+            [investments.id]: investments.openingBalance,
+          },
+        })
       );
 
-      const transfer = Database.addTransfer({
-        profileName: profile.name,
-        amountLocal: transferAmountLocal,
-        lockDays: days,
-        lockedUntil,
-        createdAt: new Date().toISOString(),
-        fireflyTransactionId: ffId,
+      // Built-in check: the statement must end exactly where Firefly says the
+      // accounts stand. When it does not, the page shows a warning instead of numbers.
+      const lastOf = (section: 'POCKET' | 'INVEST') =>
+        [...rows].reverse().find((r) => r.section === section)?.balanceLocal ?? 0;
+      const finalPocket = lastOf('POCKET');
+      const finalInvest = lastOf('INVEST');
+      const expectedInvest = Number((fund.balance + investments.balance).toFixed(2));
+
+      // Legacy trade rows were written in English inside Firefly. Re-label them in
+      // Hebrew from the app's own trade record, so the kid reads his own language.
+      const txByJournal = new Map(
+        Database.getTransactions(profile.name).map((tx) => [String(tx.fireflyTransactionId), tx])
+      );
+      const movements = rows.map((row) => {
+        const tx = txByJournal.get(String(row.journalId));
+        if (tx && (row.kind === 'BUY' || row.kind === 'SELL')) {
+          const verb = row.kind === 'BUY' ? 'קנית' : 'מכרת';
+          return {
+            ...row,
+            labelHe: `${STATEMENT_LABELS_HE[row.kind]} — ${verb} ${tx.shares} מניות ${tx.ticker} ב-₪${Number(tx.fiatAmount).toFixed(2)}`,
+            ticker: tx.ticker,
+            shares: tx.shares,
+          };
+        }
+        return row;
       });
 
-      LedgerService.invalidateBreakdown(profile.name);
-
-      return res.json({
+      res.json({
         success: true,
-        message: `Awesome! You moved ₪/$$ ${transferAmountLocal.toFixed(2)} from your pocket into your invest fund — and you promised not to touch it for ${days} days. 💪`,
-        transfer,
+        profile: profile.name,
+        accounts: [
+          {
+            key: 'POCKET',
+            labelHe: 'חשבון כיס',
+            accountId: pocket.id,
+            balanceLocal: pocket.balance,
+            statementFinalLocal: finalPocket,
+          },
+          {
+            key: 'INVEST',
+            labelHe: 'חשבון השקעות',
+            accountId: `${fund.id}+${investments.id}`,
+            cashLocal: fund.balance,
+            stocksLocal: investments.balance,
+            balanceLocal: expectedInvest,
+            statementFinalLocal: finalInvest,
+          },
+        ],
+        movements,
+        monthly: monthlyStatement(rows),
+        reconciled:
+          Math.abs(finalPocket - pocket.balance) < 0.02 && Math.abs(finalInvest - expectedInvest) < 0.02,
+        fetchedAt: new Date().toISOString(),
       });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
-  });
-
-  // 13. The one-way valve: money leaves the invest fund only by SELLING stock,
-  //     and only a grown-up can move it back to the pocket. Kids get the lesson
-  //     (and the countdown of the promise they made) instead of a withdrawal.
-  app.post('/api/profiles/:name/withdraw-to-pocket', (req, res) => {
-    const profile = Database.getProfile(req.params.name);
-    if (!profile) return res.status(404).json({ success: false, error: 'Profile not found.' });
-
-    const locked = Database.getTransfers(profile.name).filter(
-      (t) => new Date(t.lockedUntil).getTime() > Date.now()
-    );
-    const lockedTotal = locked.reduce((sum, t) => sum + t.amountLocal, 0);
-    const daysLeft = locked.length
-      ? Math.ceil((new Date(locked[0].lockedUntil).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-      : 0;
-
-    const error = locked.length
-      ? `Not yet! ₪/$$ ${lockedTotal.toFixed(2)} of your money is locked for another ${daysLeft} days — that is the promise you made. Money that waits works for you. 🌱`
-      : 'Invested money stays invested — that is the whole trick! If you really need money, ask a grown-up: only they can move money out of the invest fund. 🏦';
-
-    return res.status(403).json({ success: false, error });
   });
 
   // 14. Maintenance: rebuild the chart baseline of every historical snapshot

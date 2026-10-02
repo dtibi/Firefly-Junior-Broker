@@ -173,3 +173,289 @@ export function cumulativeThrough(flows: Flow[], date: string): number {
 export function investedProfit(investedWealthLocal: number, baselineLocal: number): number {
   return round2(investedWealthLocal - baselineLocal);
 }
+
+// ---------------------------------------------------------------------------
+// Bank statement ("החשבון שלי")
+// ---------------------------------------------------------------------------
+
+/** The two accounts the kid sees: the pocket and the investing account. */
+export type StatementSection = 'POCKET' | 'INVEST';
+
+export type StatementKind =
+  | 'OPENING'
+  | 'ALLOWANCE'
+  | 'SAVING'
+  | 'DEPOSIT'
+  | 'SPENDING'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_OUT'
+  | 'BUY'
+  | 'SELL'
+  | 'PROFIT'
+  | 'LOSS'
+  | 'CORRECTION';
+
+/** Everything the kid reads on the statement is in Hebrew. */
+export const STATEMENT_LABELS_HE: Record<StatementKind, string> = {
+  OPENING: 'יתרת פתיחה',
+  ALLOWANCE: 'דמי כיס',
+  SAVING: 'חיסכון אוטומטי',
+  DEPOSIT: 'הפקדה',
+  SPENDING: 'הוצאה',
+  TRANSFER_IN: 'כסף שנכנס',
+  TRANSFER_OUT: 'כסף שיצא',
+  BUY: 'קניית מניה',
+  SELL: 'מכירת מניה',
+  PROFIT: 'רווח מהבנק של אבא',
+  LOSS: 'הפסד לבנק של אבא',
+  CORRECTION: 'תיקון',
+};
+
+export interface StatementRow {
+  journalId: string;
+  date: string;
+  kind: StatementKind;
+  labelHe: string;
+  description: string;
+  section: StatementSection;
+  /** Effect on that account's total (cash + stock at cost), in local currency. */
+  amountLocal: number;
+  /** Cash moved, signed from that account's point of view (0 inside the invest account). */
+  cashLocal: number;
+  shares?: number;
+  ticker?: string;
+  /** Filled by withRunningBalances(). */
+  balanceLocal?: number;
+}
+
+export interface StatementInput {
+  pocketId: string;
+  fundId: string;
+  investmentId: string;
+  dadAccountId: string;
+  /** id → {name, type} for every account in the instance. */
+  accountsById: Record<string, { name?: string; type?: string }>;
+  /** Opening balances, so the statement can start where the ledger starts. */
+  openingByAccount?: Record<string, number>;
+}
+
+function kinderLabel(kind: StatementKind, description: string): string {
+  const base = STATEMENT_LABELS_HE[kind];
+  if (!description) return base;
+  // Trade rows written before 2026-10-02 carry English descriptions from Firefly
+  // ("Stock Purchase: Buy 0.1352 shares of SPY"). The kid reads Hebrew, so those
+  // are suppressed here; the server re-labels them from the local trade record
+  // with a Hebrew sentence instead.
+  const hasHebrew = /[\u0590-\u05FF]/.test(description);
+  if (!hasHebrew && (kind === 'BUY' || kind === 'SELL')) return base;
+  return `${base} — ${description}`;
+}
+
+/**
+ * Turns raw Firefly splits into statement rows, in Hebrew, grouped into the two
+ * accounts the kid understands:
+ *   POCKET = his pocket-money account, INVEST = the invest fund + the stocks.
+ * Stock moves inside the invest account never change its total (cash becomes
+ * stock at cost), which is exactly how a bank statement shows a purchase.
+ */
+export function classifyStatement(journals: LedgerJournal[], input: StatementInput): StatementRow[] {
+  const sectionOf = (id: string): StatementSection | null => {
+    if (id === input.pocketId) return 'POCKET';
+    if (id === input.fundId || id === input.investmentId) return 'INVEST';
+    return null;
+  };
+  const dadId = String(input.dadAccountId);
+
+  const rows: StatementRow[] = [];
+
+  // Opening balances first — one row per account that has one.
+  for (const [accountId, opening] of Object.entries(input.openingByAccount || {})) {
+    const section = sectionOf(String(accountId));
+    if (!section || !opening) continue;
+    rows.push({
+      journalId: '',
+      date: '',
+      kind: 'OPENING',
+      labelHe: STATEMENT_LABELS_HE.OPENING,
+      description: input.accountsById[String(accountId)]?.name || '',
+      section,
+      amountLocal: round2(opening),
+      cashLocal: round2(opening),
+    });
+  }
+
+  const seen = new Set<string>();
+  for (const journal of journals) {
+    const journalId = String(journal.id ?? '');
+    for (const split of journal.attributes?.transactions || []) {
+      if (split.type === 'opening balance') continue;
+      const amount = Number(split.amount || 0);
+      if (!amount) continue;
+
+      const src = String(split.source_id ?? '');
+      const dst = String(split.destination_id ?? '');
+      const sig = `${journalId}|${src}|${dst}|${amount}|${split.date}|${split.description || ''}`;
+      if (seen.has(sig)) continue; // the same split comes back once per touched account
+      seen.add(sig);
+
+      const date = String(split.date || '').slice(0, 10);
+      const description = split.description || '';
+      const srcSection = sectionOf(src);
+      const dstSection = sectionOf(dst);
+      const base = { journalId, date, description };
+
+      // Bank of Dad: the trading profit/loss, never a deposit.
+      if (src === dadId && dstSection) {
+        rows.push({
+          ...base,
+          kind: 'PROFIT',
+          labelHe: kinderLabel('PROFIT', ''),
+          section: dstSection,
+          amountLocal: round2(amount),
+          cashLocal: round2(amount),
+        });
+        continue;
+      }
+      if (dst === dadId && srcSection) {
+        rows.push({
+          ...base,
+          kind: 'LOSS',
+          labelHe: kinderLabel('LOSS', ''),
+          section: srcSection,
+          amountLocal: round2(-amount),
+          cashLocal: round2(-amount),
+        });
+        continue;
+      }
+
+      const counterparty = input.accountsById[src === input.pocketId || srcSection ? dst : src] || {};
+      const isCorrection = /תיקון/.test(description);
+
+      // ---- inside the kid's own accounts ----
+      if (srcSection && dstSection) {
+        if (srcSection === dstSection) {
+          // Stays inside one account: cash ↔ stock at cost, or fund ↔ stocks.
+          if (src === input.fundId && dst === input.investmentId) {
+            rows.push({ ...base, kind: 'BUY', labelHe: kinderLabel('BUY', description), section: 'INVEST', amountLocal: 0, cashLocal: round2(-amount) });
+            continue;
+          }
+          if (src === input.investmentId && dst === input.fundId) {
+            rows.push({ ...base, kind: 'SELL', labelHe: kinderLabel('SELL', description), section: 'INVEST', amountLocal: 0, cashLocal: round2(amount) });
+            continue;
+          }
+          // fund ↔ investment account (legacy savings moves) — no total change.
+          continue;
+        }
+
+        // Money crossing between the two accounts the kid sees: a pocket-funded
+        // purchase, a sale whose money goes back to the pocket, or a legacy move.
+        const outKind: StatementKind = isCorrection
+          ? 'CORRECTION'
+          : src === input.pocketId && dst === input.investmentId
+            ? 'BUY'
+            : src === input.investmentId && dst === input.pocketId
+              ? 'SELL'
+              : 'TRANSFER_OUT';
+        const inKind: StatementKind = isCorrection
+          ? 'CORRECTION'
+          : outKind === 'BUY' || outKind === 'SELL'
+            ? outKind
+            : 'TRANSFER_IN';
+        rows.push({ ...base, kind: outKind, labelHe: kinderLabel(outKind, description), section: srcSection, amountLocal: round2(-amount), cashLocal: round2(-amount) });
+        rows.push({ ...base, kind: inKind, labelHe: kinderLabel(inKind, description), section: dstSection, amountLocal: round2(amount), cashLocal: round2(amount) });
+        continue;
+      }
+
+      // ---- crossing the kid's boundary (allowance, spending, family) ----
+      const ownSection = srcSection || dstSection;
+      if (!ownSection) continue;
+      const moneyIn = Boolean(dstSection);
+
+      if (!moneyIn && counterparty.type === 'expense') {
+        rows.push({ ...base, kind: 'SPENDING', labelHe: kinderLabel('SPENDING', description), section: ownSection, amountLocal: round2(-amount), cashLocal: round2(-amount) });
+        continue;
+      }
+      if (moneyIn && counterparty.type === 'revenue') {
+        // The description decides: weekly pocket money, the automatic saving, or
+        // a one-off deposit (work, gifts). The counterparty account name is not
+        // used — the recurring allowance account feeds both pockets.
+        const kind: StatementKind = /דמי כיס/.test(description)
+          ? 'ALLOWANCE'
+          : /חיסכון/.test(description)
+            ? 'SAVING'
+            : 'DEPOSIT';
+        rows.push({ ...base, kind, labelHe: kinderLabel(kind, description), section: ownSection, amountLocal: round2(amount), cashLocal: round2(amount) });
+        continue;
+      }
+
+      const kind: StatementKind = moneyIn ? 'TRANSFER_IN' : 'TRANSFER_OUT';
+      rows.push({
+        ...base,
+        kind,
+        labelHe: kinderLabel(kind, description),
+        section: ownSection,
+        amountLocal: moneyIn ? round2(amount) : round2(-amount),
+        cashLocal: moneyIn ? round2(amount) : round2(-amount),
+      });
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Sorts the rows (opening first, then by date) and adds the running balance of
+ * each account, so the statement reads like a bank statement.
+ */
+export function withRunningBalances(rows: StatementRow[]): StatementRow[] {
+  const ordered = rows.slice().sort((a, b) => {
+    const byDate = String(a.date).localeCompare(String(b.date));
+    if (byDate !== 0) return byDate;
+    const aOpen = a.kind === 'OPENING' ? 0 : 1;
+    const bOpen = b.kind === 'OPENING' ? 0 : 1;
+    if (aOpen !== bOpen) return aOpen - bOpen;
+    return Number(a.journalId || 0) - Number(b.journalId || 0);
+  });
+
+  const balances: Record<StatementSection, number> = { POCKET: 0, INVEST: 0 };
+  return ordered.map((row) => {
+    balances[row.section] = round2(balances[row.section] + row.amountLocal);
+    return { ...row, balanceLocal: balances[row.section] };
+  });
+}
+
+/** Monthly in/out summary + the balance each month ended on, per account. */
+export function monthlyStatement(rows: StatementRow[]): {
+  section: StatementSection;
+  month: string;
+  inLocal: number;
+  outLocal: number;
+  endBalanceLocal: number;
+}[] {
+  const buckets = new Map<string, { inLocal: number; outLocal: number; endBalanceLocal: number }>();
+  const out: { section: StatementSection; month: string; inLocal: number; outLocal: number; endBalanceLocal: number }[] = [];
+
+  for (const section of ['POCKET', 'INVEST'] as StatementSection[]) {
+    buckets.clear();
+    const sectionRows = rows.filter((r) => r.section === section);
+    // Opening balances carry no date: they belong to the month the account starts in.
+    const firstMonth = sectionRows
+      .map((r) => String(r.date).slice(0, 7))
+      .filter(Boolean)
+      .sort()[0];
+
+    for (const row of sectionRows) {
+      const month = String(row.date).slice(0, 7) || firstMonth;
+      if (!month) continue;
+      const bucket = buckets.get(month) || { inLocal: 0, outLocal: 0, endBalanceLocal: 0 };
+      if (row.amountLocal >= 0) bucket.inLocal = round2(bucket.inLocal + row.amountLocal);
+      else bucket.outLocal = round2(bucket.outLocal + row.amountLocal);
+      bucket.endBalanceLocal = round2(row.balanceLocal ?? bucket.endBalanceLocal);
+      buckets.set(month, bucket);
+    }
+    for (const [month, bucket] of [...buckets.entries()].sort()) {
+      out.push({ section, month, ...bucket });
+    }
+  }
+  return out;
+}

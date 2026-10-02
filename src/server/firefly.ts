@@ -4,7 +4,7 @@
  */
 
 import { classifyKidLedger, cumulativeThrough } from './ledger-rules.js';
-import { planLiquidation } from './rules.js';
+import { LotSale } from './lots.js';
 
 interface FireflyTxPayload {
   type: 'transfer' | 'deposit' | 'withdrawal';
@@ -182,111 +182,63 @@ export const LedgerService = {
   },
 
   /**
-   * Executes double-entry clearance through the parent "Bank of Dad" Clearance Account
+   * Posts the ledger legs of selling ONE lot (approved 2026-10-02):
+   *   - the principal returns to the account the lot came FROM (pocket-funded
+   *     lot → the pocket, fund-funded lot → the invest fund),
+   *   - a gain comes from the Bank of Dad, a loss goes to it,
+   *   - a break-even sale posts no adjustment leg (Firefly rejects ₪0.00).
+   * One journal per lot, so every lot stays traceable inside Firefly III.
    */
-  async executeLiquidationDoubleEntry(params: {
-    ticker: string;
-    shares: number;
-    currentPriceUsd: number;
-    originalPrincipalUsd: number;
-    savingsAccountId: string;
+  async postLotSale(params: {
+    sale: LotSale;
+    kidName: string;
+    acquiredAt: string;
+    fundAccountId: string;
+    pocketAccountId: string;
     investmentAccountId: string;
-    currencyMode: 'PARITY' | 'REAL';
-    fxRate: number;
-  }): Promise<{
-    principalTransferId: string;
-    adjustmentTransferId: string;
-    deltaValue: number;
-    isGain: boolean;
-  }> {
-    const {
-      ticker,
-      shares,
-      currentPriceUsd,
-      originalPrincipalUsd,
-      savingsAccountId,
-      investmentAccountId,
-      currencyMode,
-      fxRate,
-    } = params;
+  }): Promise<{ principalTransferId: string; adjustmentTransferId: string }> {
+    const { sale, kidName, acquiredAt, fundAccountId, pocketAccountId, investmentAccountId } = params;
+    const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '25';
+    const isPocket = sale.destination === 'POCKET';
+    const backTo = isPocket ? pocketAccountId : fundAccountId;
+    const boughtOn = String(acquiredAt || '').slice(0, 10);
 
-    // All the arithmetic lives in src/server/rules.ts (single source of truth,
-    // unit-tested) — this method only talks to Firefly III.
-    const plan = planLiquidation({
-      percentage: 100,
-      holding: {
-        profileName: '',
-        ticker,
-        shares,
-        averagePriceUsd: shares > 0 ? originalPrincipalUsd / shares : 0,
-        originalPrincipalUsd,
-        lastUpdated: new Date().toISOString(),
-      },
-      priceUsd: currentPriceUsd,
-      currencyMode,
-      fxRate,
-    });
-    if (!plan.ok) {
-      throw new Error(`[LedgerSync] ${plan.error}`);
-    }
-
-    const {
-      isGain,
-      sharesToSell,
-      principalLocal: principalFiat,
-      currentValueLocal: currentTotalFiat,
-      deltaLocal,
-      fundReturnLocal: returnAmount,
-    } = plan.value;
-    const deltaFiat = Math.abs(deltaLocal);
-
-    console.log(`[LedgerSync] Liquidation details for ${ticker}: `
-      + `principal ${principalFiat.toFixed(2)} / value ${currentTotalFiat.toFixed(2)} / `
-      + `delta ${isGain ? '+' : '-'}${deltaFiat.toFixed(2)} (${sharesToSell} shares)`);
-
-    const dadAccountId = process.env.BANK_OF_DAD_ACCOUNT_ID || '99';
-
-    // Action A: Return sale proceeds from investment account back to savings.
-    // For gains: return the original principal (profit comes from Dad in Action B).
-    // For losses: return only the current value (the difference is the loss sent to Dad in Action C).
-    // This keeps the investment account balance at net zero after both actions.
+    // Leg 1: the principal (or the current value, when the sale lost money)
+    // leaves the investments account and returns to where it came from.
     const principalTransferId = await this.createTransfer(
-      returnAmount,
-      `Liquidation Principal Return: Sell ${shares.toFixed(4)} shares of ${ticker}`,
+      sale.principalReturnLocal,
+      `מכירת ${sale.ticker}: ₪${sale.principalReturnLocal.toFixed(2)} חזרו `
+        + `${isPocket ? 'לכיס' : 'לקרן ההשקעות'} (מגרש מ-${boughtOn}) — ${kidName}`,
       investmentAccountId,
-      savingsAccountId
+      backTo
     );
 
+    // Leg 2: only the gain/loss crosses the Bank of Dad — never the principal.
     let adjustmentTransferId = '';
-
-    // Only create an adjustment transfer if the gain/loss rounds to at least 0.01
-    // (Firefly III rejects zero-amount transfers)
-    if (Number(deltaFiat.toFixed(2)) > 0) {
-      if (isGain) {
-        // Action B (If Gain): Transfer profit from Bank of Dad account into the child's savings account
-        adjustmentTransferId = await this.createTransfer(
-          deltaFiat,
-          `Liquidation Investment Profit (Bank of Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
-          dadAccountId,
-          savingsAccountId
-        );
-      } else {
-        // Action C (If Loss): Transfer the lost amount from the child's investment sub-account directly to the Bank of Dad
-        adjustmentTransferId = await this.createTransfer(
-          deltaFiat,
-          `Liquidation Loss Adjustment (Paid to Dad): Sell ${shares.toFixed(4)} shares of ${ticker}`,
-          investmentAccountId,
-          dadAccountId
-        );
-      }
+    if (sale.adjustmentKind === 'profit') {
+      adjustmentTransferId = await this.createTransfer(
+        sale.adjustmentLocal,
+        `רווח מהבנק של אבא על מכירת ${sale.ticker}: +₪${sale.adjustmentLocal.toFixed(2)} `
+          + `(מגרש מ-${boughtOn}) — ${kidName}`,
+        dadAccountId,
+        backTo
+      );
+    } else if (sale.adjustmentKind === 'loss') {
+      adjustmentTransferId = await this.createTransfer(
+        sale.adjustmentLocal,
+        `הפסד על מכירת ${sale.ticker}: −₪${sale.adjustmentLocal.toFixed(2)} `
+          + `עברו לבנק של אבא (מגרש מ-${boughtOn}) — ${kidName}`,
+        investmentAccountId,
+        dadAccountId
+      );
     }
 
-    return {
-      principalTransferId,
-      adjustmentTransferId,
-      deltaValue: deltaFiat,
-      isGain,
-    };
+    console.log(
+      `[LedgerSync] Lot sale ${sale.ticker} (${sale.shares} shares): principal ₪${sale.principalReturnLocal.toFixed(2)} → `
+        + `${isPocket ? 'pocket' : 'fund'}, ${sale.adjustmentKind} ₪${sale.adjustmentLocal.toFixed(2)}`
+    );
+
+    return { principalTransferId, adjustmentTransferId };
   },
 
   /** Reads a raw Firefly account (live balance + opening balance). */
@@ -311,6 +263,19 @@ export const LedgerService = {
     const ids = new Set<string>((data?.data || []).map((a: any) => String(a.id)));
     revenueCache = { at: Date.now(), ids };
     return ids;
+  },
+
+  /** Every account (id → name/type) — used by the bank-statement classifier. */
+  async listAccounts(): Promise<Record<string, { name: string; type: string }>> {
+    const data = await fireflyGet('/api/v1/accounts?limit=300');
+    const out: Record<string, { name: string; type: string }> = {};
+    for (const account of data?.data || []) {
+      out[String(account.id)] = {
+        name: account?.attributes?.name ?? '',
+        type: account?.attributes?.type ?? '',
+      };
+    }
+    return out;
   },
 
   /** Every journal that touches one account (paged). */

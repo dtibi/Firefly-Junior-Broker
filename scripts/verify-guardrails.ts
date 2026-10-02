@@ -1,6 +1,5 @@
 /**
- * Guardrail verification for the money-moving endpoints (/api/trade,
- * /api/profiles/:name/transfer).
+ * Guardrail verification for the money-moving endpoint (/api/trade).
  *
  * Sends deliberately INVALID requests and asserts the server answers with the
  * message produced by the unit-tested rules in src/server/rules.ts.
@@ -15,7 +14,7 @@
  * Run: npm run verify:guardrails   (server must be running)
  */
 import { Database } from '../src/server/db.js';
-import { planBuy, planLiquidation, validateTransfer } from '../src/server/rules.js';
+import { planBuy, validateBuyFunds } from '../src/server/rules.js';
 import type { Holding } from '../src/types.js';
 
 const BASE = process.env.APP_URL || 'http://localhost:3000';
@@ -71,6 +70,11 @@ async function main() {
     holdings[0] ?? { profileName: PROFILE, ticker: 'SPY', shares: 1, averagePriceUsd: 100,
       originalPrincipalUsd: 100, lastUpdated: '' };
 
+  // The lots the kid actually owns — used to probe the sell-selection guardrail.
+  const openLots: any[] = (portfolio?.lots ?? []).filter((l: any) => l.status === 'OPEN');
+  const sellTicker: string = openLots[0]?.ticker ?? firstHolding.ticker;
+  console.log(`lots: ${openLots.length} open (sell probe: ${sellTicker})`);
+
   console.log(`live data: SPY $${price('SPY')} · pocket ₪${pocketLocal} · ${holdings.length} holdings`);
 
   // A sub-0.01 share slice only exists for a ticker expensive enough that even
@@ -83,25 +87,36 @@ async function main() {
   const checks: Check[] = [
     {
       label: 'BUY below the minimum order size',
-      proof: planBuy({ profileName: PROFILE, ticker: 'NKE', amountLocal: 5, priceUsd: price('NKE'),
-        currencyMode, fxRate }),
+      proof: planBuy({ ticker: 'NKE', amountLocal: 5, priceUsd: price('NKE'), currencyMode, fxRate }),
       run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: 'NKE', type: 'BUY', amount: 5 }),
       expect: /Minimum order size/,
     },
     ...(expensive ? [{
       label: `BUY that would be a sub-0.01 share slice (${expensive.ticker})`,
-      proof: planBuy({ profileName: PROFILE, ticker: expensive.ticker, amountLocal: 10,
+      proof: planBuy({ ticker: expensive.ticker, amountLocal: 10,
         priceUsd: expensive.priceUsd, currencyMode, fxRate }),
       run: (p: string) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: expensive.ticker,
         type: 'BUY', amount: 10 }),
       expect: /fraction below/,
     }] : []),
     {
-      label: 'SELL with an illegal percentage',
-      proof: planLiquidation({ percentage: 0, holding: firstHolding, priceUsd: price('SPY'),
-        currencyMode: currencyMode as any, fxRate }),
-      run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: firstHolding.ticker, type: 'SELL', amount: 0 }),
-      expect: /between 1 and 100/,
+      label: 'BUY paid from the pocket for more than the pocket holds (the app must never move money to cover it)',
+      proof: validateBuyFunds({
+        fundingSource: 'POCKET',
+        amountLocal: pocketLocal + 1000,
+        pocketLocal,
+        fundLocal: 0,
+      }),
+      run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: 'NKE', type: 'BUY',
+        amount: pocketLocal + 1000, fundingSource: 'POCKET' }),
+      expect: /אין מספיק כסף/,
+    },
+    {
+      label: 'SELL a lot that does not exist',
+      proof: { ok: false, error: 'no open lot carries that id' },
+      run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: sellTicker, type: 'SELL',
+        lotIds: ['lot-does-not-exist'] }),
+      expect: /כבר לא זמין|אין לך מניות/,
     },
     {
       label: 'trade with a wrong PIN',
@@ -109,12 +124,6 @@ async function main() {
       run: (p) => post('/api/trade', { profileName: PROFILE, pin: p === '0000' ? '1111' : '0000',
         ticker: 'NKE', type: 'BUY', amount: 20 }),
       expect: /Incorrect 4-digit PIN/,
-    },
-    {
-      label: 'pocket→fund transfer below the minimum',
-      proof: validateTransfer({ amountLocal: 5, pocketBalanceLocal: pocketLocal, lockDays: 90 }),
-      run: (p) => post(`/api/profiles/${encodeURIComponent(PROFILE)}/transfer`, { pin: p, amount: 5, lockDays: 90 }),
-      expect: /Minimum transfer/,
     },
   ];
 

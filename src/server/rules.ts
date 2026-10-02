@@ -2,23 +2,23 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Pure business rules for trades, liquidations and pocket-money transfers.
- * No network, no database — every rule the kids' money obeys lives here so it
- * can be unit-tested and so the SERVER and the LEDGER services can never
- * disagree about the arithmetic (they used to duplicate it).
+ * Pure business rules for trades and pockets. No network, no database — every
+ * rule the kids' money obeys lives here so it can be unit-tested and so the
+ * SERVER and the LEDGER services can never disagree about the arithmetic.
+ *
+ * 2026-10-02 (approved): the pocket↔invest-fund transfer with its promise/lock
+ * window was REMOVED. There is no way to move money between the two accounts:
+ * money enters the invest account only by buying stock (paid from the pocket or
+ * from the fund's cash) and leaves it only by selling a lot — and a sold lot
+ * returns the money to the account it came from. See src/server/lots.ts.
  */
 
-import { Holding, CurrencyMode } from '../types.js';
+import { CurrencyMode, FundingSource } from '../types.js';
 
-/** Minimum order size (buy and transfer) in the kid's local currency. */
+/** Minimum order size (buy) in the kid's local currency. */
 export const MIN_ORDER_LOCAL = 10;
 /** Smallest tradable fraction of a share. */
 export const MIN_SHARE_FRACTION = 0.01;
-/** The pocket money a transfer always leaves behind. */
-export const KEEP_IN_POCKET_LOCAL = 10;
-/** Lock ("promise") windows a kid can choose when moving pocket money to the fund. */
-export const ALLOWED_LOCK_DAYS = [30, 90, 365];
-export const DEFAULT_LOCK_DAYS = 90;
 
 const round4 = (v: number) => Number(v.toFixed(4));
 const round2 = (v: number) => Number(v.toFixed(2));
@@ -46,24 +46,26 @@ export interface BuyValue {
   investUsd: number;
   /** Shares acquired (4 decimals). */
   shares: number;
-  /** Resulting holding row (merged with an existing position when present). */
-  holding: Holding;
+  /** Where the money came from — and therefore where a future sale returns it. */
+  fundingSource: FundingSource;
+  /** Which of the kid's accounts pays: the pocket or the invest fund. */
+  sourceAccountRole: 'spending' | 'savings';
 }
 
 /**
  * Validates and computes a BUY. Mirrors the guardrails enforced by POST /api/trade.
+ * Nothing is merged here any more: every buy becomes its own lot.
  */
 export function planBuy(params: {
-  profileName: string;
   ticker: string;
   amountLocal: number;
   priceUsd: number;
   currencyMode: CurrencyMode;
   fxRate: number;
-  existingHolding?: Holding | null;
-  now?: Date;
+  fundingSource?: FundingSource;
 }): RuleResult<BuyValue> {
-  const { profileName, ticker, amountLocal, priceUsd, currencyMode, fxRate, existingHolding } = params;
+  const { amountLocal, priceUsd, currencyMode, fxRate } = params;
+  const fundingSource: FundingSource = params.fundingSource === 'POCKET' ? 'POCKET' : 'FUND';
 
   if (!Number.isFinite(amountLocal) || amountLocal < MIN_ORDER_LOCAL) {
     return {
@@ -86,175 +88,44 @@ export function planBuy(params: {
     };
   }
 
-  const lastUpdated = (params.now || new Date()).toISOString();
-  let holding: Holding;
-
-  if (existingHolding && existingHolding.shares > 0) {
-    const totalShares = existingHolding.shares + shares;
-    const totalPrincipal = existingHolding.originalPrincipalUsd + investUsd;
-    holding = {
-      profileName,
-      ticker,
-      shares: round4(totalShares),
-      averagePriceUsd: round2(totalPrincipal / totalShares),
-      originalPrincipalUsd: round2(totalPrincipal),
-      lastUpdated,
-    };
-  } else {
-    holding = {
-      profileName,
-      ticker,
-      shares: round4(shares),
-      averagePriceUsd: round2(priceUsd),
-      originalPrincipalUsd: round2(investUsd),
-      lastUpdated,
-    };
-  }
-
-  return { ok: true, value: { investLocal: amountLocal, investUsd: round2(investUsd), shares: round4(shares), holding } };
-}
-
-// ---------------------------------------------------------------------------
-// SELL / liquidation (the "Bank of Dad" double entry)
-// ---------------------------------------------------------------------------
-
-export interface LiquidationValue {
-  percentage: number;
-  sharesToSell: number;
-  /** USD principal of the sold slice (used to shrink the holding row). */
-  principalUsd: number;
-  /** USD market value of the sold slice. */
-  currentUsd: number;
-  /** Principal being returned, in the kid's local currency. */
-  principalLocal: number;
-  /** Market value of the sold slice, in local currency. */
-  currentValueLocal: number;
-  /** Signed gain/loss in local currency. */
-  deltaLocal: number;
-  isGain: boolean;
-  /** What the investment account pays back to the fund (principal on a gain, value on a loss). */
-  fundReturnLocal: number;
-}
-
-export function planLiquidation(params: {
-  percentage: number;
-  holding: Holding;
-  priceUsd: number;
-  currencyMode: CurrencyMode;
-  fxRate: number;
-}): RuleResult<LiquidationValue> {
-  const { percentage, holding, priceUsd, currencyMode, fxRate } = params;
-
-  if (!Number.isFinite(percentage) || percentage < 1 || percentage > 100) {
-    return { ok: false, error: 'Liquidating percentage must be between 1 and 100.' };
-  }
-  if (!holding || holding.shares <= 0) {
-    return { ok: false, error: 'You do not own any shares of this stock.' };
-  }
-
-  const sharesToSell = (percentage / 100) * holding.shares;
-  const principalUsd = (percentage / 100) * holding.originalPrincipalUsd;
-  const currentUsd = sharesToSell * priceUsd;
-  const deltaUsd = currentUsd - principalUsd;
-  const fxFactor = currencyMode === 'PARITY' ? 1.0 : fxRate; // ILS per USD when REAL
-  const toLocal = (usd: number) => (currencyMode === 'PARITY' ? usd : usd / fxFactor);
-
-  const principalLocal = round2(toLocal(principalUsd));
-  const currentValueLocal = round2(toLocal(currentUsd));
-  const deltaLocal = round2(toLocal(deltaUsd));
-  const isGain = deltaLocal >= 0;
-
   return {
     ok: true,
     value: {
-      percentage,
-      sharesToSell: round4(sharesToSell),
-      principalUsd: round2(principalUsd),
-      currentUsd: round2(currentUsd),
-      principalLocal,
-      currentValueLocal,
-      deltaLocal,
-      isGain,
-      fundReturnLocal: isGain ? principalLocal : currentValueLocal,
+      investLocal: round2(amountLocal),
+      investUsd: round2(investUsd),
+      shares: round4(shares),
+      fundingSource,
+      sourceAccountRole: fundingSource === 'POCKET' ? 'spending' : 'savings',
     },
   };
 }
 
-export interface PlannedTransfer {
-  amount: number;
-  from: string;
-  to: string;
-}
-
-export interface LiquidationTransfers {
-  principal: PlannedTransfer;
-  /** Profit from Dad → fund, or loss from the fund → Dad (omitted when break-even). */
-  adjustment?: PlannedTransfer & { kind: 'profit' | 'loss' };
-}
-
 /**
- * The three-legged double entry: principal always returns to the fund; the
- * gain comes from the Bank of Dad, the loss goes back to it.
- * Firefly III rejects zero-amount transfers, so a break-even sale has no adjustment.
+ * Is there enough money in the account the kid chose to pay from?
+ * Money is never moved between the accounts to cover a purchase — he can only
+ * spend what is already there, which is the whole point of choosing.
  */
-export function planLiquidationTransfers(
-  value: LiquidationValue,
-  accounts: { fundAccountId: string; investmentAccountId: string; dadAccountId: string }
-): LiquidationTransfers {
-  const principal: PlannedTransfer = {
-    amount: value.fundReturnLocal,
-    from: accounts.investmentAccountId,
-    to: accounts.fundAccountId,
-  };
-
-  const adjustmentAmount = Number(Math.abs(value.deltaLocal).toFixed(2));
-  if (adjustmentAmount <= 0) return { principal };
-
-  return {
-    principal,
-    adjustment: value.isGain
-      ? { amount: adjustmentAmount, from: accounts.dadAccountId, to: accounts.fundAccountId, kind: 'profit' }
-      : { amount: adjustmentAmount, from: accounts.investmentAccountId, to: accounts.dadAccountId, kind: 'loss' },
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Pocket money → invest fund
-// ---------------------------------------------------------------------------
-
-export interface TransferValue {
+export function validateBuyFunds(params: {
+  fundingSource: FundingSource;
   amountLocal: number;
-  days: number;
-  lockedUntil: string;
-}
+  pocketLocal: number;
+  fundLocal: number;
+}): RuleResult<{ availableLocal: number; accountNameHe: string }> {
+  const isPocket = params.fundingSource === 'POCKET';
+  const availableLocal = round2(isPocket ? params.pocketLocal : params.fundLocal);
+  const accountNameHe = isPocket ? 'בכיס' : 'בקרן ההשקעות';
 
-export function validateTransfer(params: {
-  amountLocal: number;
-  pocketBalanceLocal: number;
-  lockDays?: number;
-  now?: Date;
-}): RuleResult<TransferValue> {
-  const amountLocal = Number(params.amountLocal);
-  if (!Number.isFinite(amountLocal) || amountLocal < MIN_ORDER_LOCAL) {
+  if (!Number.isFinite(params.amountLocal) || params.amountLocal <= 0) {
+    return { ok: false, error: 'צריך לבחור סכום כדי לקנות.' };
+  }
+  if (round2(params.amountLocal) > availableLocal) {
     return {
       ok: false,
-      error: `Minimum transfer is ₪/$$ ${MIN_ORDER_LOCAL} — the same as the minimum stock purchase.`,
+      error: `אין מספיק כסף ${accountNameHe}: יש ₪${availableLocal.toFixed(2)} ואתה מנסה לקנות ב-₪${round2(params.amountLocal).toFixed(2)}.`,
     };
   }
 
-  const days = ALLOWED_LOCK_DAYS.includes(Number(params.lockDays)) ? Number(params.lockDays) : DEFAULT_LOCK_DAYS;
-
-  const spendable = Number(params.pocketBalanceLocal) - KEEP_IN_POCKET_LOCAL;
-  if (amountLocal > spendable) {
-    return {
-      ok: false,
-      error: `Not enough pocket money. You have ₪/$$ ${Number(params.pocketBalanceLocal).toFixed(2)} and we always keep ₪/$$ ${KEEP_IN_POCKET_LOCAL.toFixed(2)} in your pocket.`,
-    };
-  }
-
-  const now = params.now || new Date();
-  const lockedUntil = new Date(now.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
-  return { ok: true, value: { amountLocal: round2(amountLocal), days, lockedUntil } };
+  return { ok: true, value: { availableLocal, accountNameHe } };
 }
 
 // ---------------------------------------------------------------------------
