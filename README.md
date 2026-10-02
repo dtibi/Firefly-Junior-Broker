@@ -12,12 +12,14 @@ Parents control the allowance, Firefly III tracks every shekel, and Alpaca provi
 - **AI Coach** — Gemini-powered tutorials that explain stocks in age-appropriate language (Hebrew or English)
 - **Double-entry accounting** — trades execute real Firefly III transfers using the "Bank of Dad" clearance pattern
 - **Honest numbers** — the performance chart's baseline is the money that really came in from outside (allowance, work income, pocket-money transfers), computed live from Firefly III. Allowances never show up as investment profit
-- **Three pockets per kid** — 🍬 pocket money (spending) / 🏦 invest fund / 📈 invested stocks, with a real profit figure
-- **Pocket-money → invest-fund transfer** — with a "promise" lock window (1 month / 3 months / 1 year) and a one-way valve: money leaves the invest fund only by selling stock, and only a grown-up can move it back to the pocket
-- **Live balance sync** — all pocket balances read directly from Firefly III, not a local cache
+- **Two accounts per kid** — 🍬 pocket money (spending) and 📈 the investing account (its liquid balance = the fund's cash + the stocks at their live value), with a real profit figure
+- **No transfers between them** — money enters the investing account only by buying stock (paid from the pocket or the fund) and leaves it only by selling a lot, which returns the money to the account the lot came from
+- **Lots ("מגרשים")** — every purchase is its own row, never merged: the kid picks the exact lots to sell, each showing its own profit/loss, with a "select all" button
+- **Bank statement ("החשבון שלי")** — every movement of both accounts in Hebrew, with a running balance, a monthly in/out summary, and a built-in check that the statement ends exactly on the live Firefly balance
+- **Live balance sync** — all account balances read directly from Firefly III, not a local cache
 - **i18n / RTL** — full Hebrew translation, automatic language detection, RTL layout support
 - **Performance charts** — hand-rolled SVG charts: portfolio value vs money-in-from-outside, plus real 30-day price history per stock
-- **PIN security** — 4-digit PINs hashed with SHA-256, required for login, every trade, and every transfer
+- **PIN security** — 4-digit PINs hashed with SHA-256, required for login and every trade
 
 ## Tech Stack
 
@@ -99,11 +101,12 @@ When creating a profile in the app, enter the Firefly III account IDs for that c
 
 ### How the ledger works
 
-**BUY trade:** savings → investment (transfer)
-**SELL trade (profit):** investment → savings (principal return) + Bank of Dad → savings (profit reward)
-**SELL trade (loss):** investment → savings (current value only) + investment → Bank of Dad (loss adjustment)
+**BUY trade (paid from the pocket):** spending → investment (one transfer, one new lot)
+**BUY trade (paid from the fund):** savings → investment (one transfer, one new lot)
+**SELL trade (profit):** investment → the account the lot came from (principal return) + Bank of Dad → that same account (profit reward)
+**SELL trade (loss):** investment → the account the lot came from (current value only) + investment → Bank of Dad (loss adjustment)
 **Allowance / work income:** revenue account → savings and/or spending (a Firefly *deposit*)
-**Pocket money → invest fund:** spending → savings, logged with a promise/lock window
+**Between the two accounts:** nothing — there is no transfer path, by design
 
 This teaches kids that money never vanishes — it always moves between accounts in a structured double loop.
 
@@ -115,8 +118,7 @@ recomputed from the Firefly III journal every time:
 
 ```
 baseline = opening balances
-         + every flow INTO the kid's accounts from outside (allowance, work income, gifts,
-           pocket-money transfers into the invest fund)
+         + every flow INTO the kid's accounts from outside (allowance, work income, gifts)
          − every flow OUT (spending, transfers to accounts outside the kid's set)
          [flows with the Bank of Dad account are EXCLUDED — they ARE the trading profit/loss]
 ```
@@ -148,19 +150,22 @@ real deposit history (safe to re-run after changing account structure).
 │   └── server/
 │       ├── db.ts          # JSON database
 │       ├── migrate.ts     # Pure schema migrations (unit-tested)
-│       ├── ledger-rules.ts # Pure ledger classification (no I/O) — the accounting brain
-│       ├── rules.ts       # Pure trade/transfer rules — the guardrails + arithmetic
+│       ├── ledger-rules.ts # Pure ledger classification + the statement classifier (no I/O)
+│       ├── lots.ts        # Pure lot rules — one purchase = one lot, sold by selection
+│       ├── rules.ts       # Pure trade rules — the guardrails + arithmetic
 │       ├── alpaca.ts      # Market data service
 │       ├── firefly.ts     # Firefly III integration
 │       └── ai.ts          # Gemini AI service
 ├── test/                  # Unit tests (node:test, run with tsx)
 │   ├── ledger-rules.test.ts
+│   ├── statement-rules.test.ts
+│   ├── lots.test.ts
 │   ├── trade-rules.test.ts
-│   ├── transfer-rules.test.ts
 │   ├── stock-catalog.test.ts
 │   └── migrations.test.ts
 ├── scripts/
-│   └── verify-guardrails.ts  # Live guardrail checks against a running server
+│   ├── verify-guardrails.ts   # Live guardrail checks against a running server
+│   └── seed-legacy-lots.py    # One-off, audited lots seed (dry-run by default)
 ├── data/
 │   └── db.json            # Runtime database (auto-created, gitignored)
 └── CLAUDE.md              # Developer reference
@@ -174,7 +179,7 @@ npm run dev          # Development server on :3000
 npm run build        # Production build
 npm run start        # Run production build
 npm run lint         # Type-check (tsc --noEmit)
-npm test             # Unit tests (60 tests, no network / no database needed)
+npm test             # Unit tests (75 tests, no network / no database needed)
 npm run verify:guardrails  # Live checks: invalid trades must be refused (server must be up)
 npm run clean        # Remove dist/ and data/
 ```
@@ -184,21 +189,24 @@ npm run clean        # Remove dist/ and data/
 The money math lives in **pure, I/O-free modules** so it can be tested without a server,
 a Firefly instance or the network:
 
-- `src/server/ledger-rules.ts` — reads Firefly journals into baselines / realized P&L
-- `src/server/rules.ts` — buy, liquidation and pocket→fund transfer rules
+- `src/server/ledger-rules.ts` — reads Firefly journals into baselines / realized P&L, and classifies the bank statement
+- `src/server/lots.ts` — one purchase = one lot: pricing a sale, closing a lot, aggregating
+- `src/server/rules.ts` — buy rules and the funding-source guardrail
 - `src/server/migrate.ts` — old `data/db.json` shapes
 
 `npm test` pins down the rules that must never regress: allowances are never counted as
-profit, opening balances are counted exactly once, the three-legged sale (`invest → fund`
-principal, `Dad → fund` profit, `invest → Dad` loss), the minimum order size, the 0.01-share
-slice floor and the "always keep ₪10 in the pocket" rule. It also checks that all 44 stocks
-carry a Hebrew name + explanation and that the Alpaca/Yahoo payload parsing still maps the
-live prices.
+profit, opening balances are counted exactly once, `profit = realized + unrealized`, lots are
+never merged and a pocket-funded lot always returns to the pocket, the per-lot three-legged
+sale (`investment → origin` principal, `Dad → origin` profit, `investment → Dad` loss), the
+minimum order size and the 0.01-share slice floor. It also checks that all 44 stocks
+carry a Hebrew name + explanation, that the Alpaca/Yahoo payload parsing still maps the
+live prices, and that the statement classifier labels every split once in Hebrew.
 
 `npm run verify:guardrails` proves the *running server* still refuses bad money requests
-(below-minimum order, sub-0.01 slice, illegal sell percentage, wrong PIN, too-small transfer).
-Each request is first pushed through the same rules the server uses; if the rules say the
-request would be legal the script refuses to send it, so a "test" can never execute a real trade.
+(below-minimum order, sub-0.01 slice, a pocket purchase larger than the pocket, selling a lot
+that does not exist, wrong PIN). Each request is first pushed through the same rules the server
+uses; if the rules say the request would be legal the script refuses to send it, so a "test" can
+never execute a real trade.
 
 ## Stocks Available
 
