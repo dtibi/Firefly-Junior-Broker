@@ -58,7 +58,9 @@ and an AI coach that answers a kid's questions in a kid's language.
 ![Trading](assets/screenshots/04-trade.png)
 
 Buying asks which money pays: pocket money (🍬) or the investment fund (📈). Selling shows every
-purchase he made, one by one, each with its own profit — and he chooses which ones to sell.
+purchase he made, one by one, each with its own profit — and he chooses which ones to sell. The
+result is named for what it is: *רווח ₪4.00 במכירת SPY — מהשוק* — "₪4.00 profit on the SPY sale,
+paid by the market" — never after the grown-up who settles it.
 
 ### The pocket account — a bank statement he can read
 ![Pocket statement](assets/screenshots/05-account-pocket.png)
