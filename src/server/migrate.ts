@@ -22,7 +22,10 @@ export function isRoniLike(name: unknown): boolean {
  * Brings a legacy DB shape up to date:
  *  - profiles: cumulativeDeposits, spendingAccountId, transfersEnabled
  *  - snapshots: cumulativeDepositsUsd / cumulativeDepositsLocal / totalValueLocal
- *  - top level: transfers (pocket-money moves with lock windows)
+ *  - top level: transfers (pocket-money moves with lock windows) and lots
+ *
+ * The migrator only guarantees the SHAPE. It never invents lots: seeding the
+ * legacy holdings into lots is a deliberate, audited one-off (see the plan).
  */
 export function migrateSchema(parsed: any): MigrationResult<any> {
   if (!parsed || typeof parsed !== 'object') return { schema: parsed, modified: false };
@@ -49,6 +52,11 @@ export function migrateSchema(parsed: any): MigrationResult<any> {
 
   if (!Array.isArray(parsed.transfers)) {
     parsed.transfers = [];
+    modified = true;
+  }
+
+  if (!Array.isArray(parsed.lots)) {
+    parsed.lots = [];
     modified = true;
   }
 

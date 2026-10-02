@@ -43,6 +43,37 @@ export interface Holding {
   lastUpdated: string;
 }
 
+/** Where a lot's money came from — and therefore where it returns when sold. */
+export type FundingSource = 'POCKET' | 'FUND';
+export type LotStatus = 'OPEN' | 'CLOSED';
+
+/**
+ * One purchase = one lot ("מגרש"). Lots are never merged: the kid picks the
+ * specific lots he wants to sell, and the lot's origin binds its money for life
+ * (pocket-funded → the sale returns to the pocket, fund-funded → to the fund).
+ */
+export interface Lot {
+  id: string;
+  profileName: string;
+  ticker: string;
+  /** Remaining shares (0 once closed). */
+  shares: number;
+  originalShares: number;
+  /** Remaining principal in the kid's local currency (0 once closed). */
+  principalLocal: number;
+  originalPrincipalLocal: number;
+  principalUsd: number;
+  priceUsdAtBuy: number;
+  acquiredAt: string;
+  fundingSource: FundingSource;
+  /** Firefly III journal of the purchase. */
+  fireflyTransactionId: string;
+  status: LotStatus;
+  /** Realized gain/loss in local currency — set when the lot is closed. */
+  realizedPnlLocal?: number;
+  closedAt?: string;
+}
+
 export interface Transaction {
   id: string;
   profileName: string;

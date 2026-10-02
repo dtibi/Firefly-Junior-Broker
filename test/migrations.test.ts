@@ -40,9 +40,10 @@ describe('migrateSchema', () => {
     assert.equal(roni.transfersEnabled, false, 'the younger kid starts with the feature off');
   });
 
-  test('adds the transfers store and snapshot baselines', () => {
+  test('adds the transfers + lots stores and snapshot baselines', () => {
     const { schema } = migrateSchema(legacyDb());
     assert.deepEqual(schema.transfers, []);
+    assert.deepEqual(schema.lots, [], 'the migrator only guarantees the shape — seeding is a one-off');
     for (const snapshot of schema.snapshots) {
       assert.equal(typeof snapshot.cumulativeDepositsUsd, 'number');
       assert.equal(typeof snapshot.cumulativeDepositsLocal, 'number');
@@ -61,6 +62,7 @@ describe('migrateSchema', () => {
     const { schema, modified } = migrateSchema({
       profiles: [{ id: '9', name: 'Dana', spendingAccountId: '42', transfersEnabled: false, cumulativeDeposits: 7 }],
       transfers: [{ id: 'tr-1' }],
+      lots: [{ id: 'lot-1' }],
       snapshots: [{ date: '2026-01-01', profileName: 'Dana', totalValueUsd: 1, cumulativeDepositsUsd: 1 }],
     });
     assert.equal(modified, false);
@@ -68,6 +70,7 @@ describe('migrateSchema', () => {
     assert.equal(schema.profiles[0].transfersEnabled, false);
     assert.equal(schema.profiles[0].cumulativeDeposits, 7);
     assert.equal(schema.transfers.length, 1);
+    assert.equal(schema.lots.length, 1, 'existing lots are never touched');
   });
 
   test('survives junk input instead of throwing', () => {

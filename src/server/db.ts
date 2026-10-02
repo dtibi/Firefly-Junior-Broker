@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { Profile, Holding, Transaction, PortfolioSnapshot, TransferRecord } from '../types.js';
+import { Profile, Holding, Transaction, PortfolioSnapshot, TransferRecord, Lot, LotStatus } from '../types.js';
 import { migrateSchema } from './migrate.js';
 
 const DB_DIR = path.join(process.cwd(), 'data');
@@ -18,6 +18,7 @@ interface Schema {
   transactions: Transaction[];
   snapshots: PortfolioSnapshot[];
   transfers: TransferRecord[]; // pocket-money -> invest-fund moves (with lock windows)
+  lots: Lot[]; // one purchase = one lot — never merged, sold by explicit selection
   cashBalances: Record<string, number>; // profileName -> virtual/savings cache cash in USD
   fxCache: {
     rate: number;
@@ -153,6 +154,7 @@ function initDb(): Schema {
       'רוני': 275.0,
     },
     transfers: [],
+    lots: [],
     fxCache: null,
   };
 
@@ -286,6 +288,7 @@ export const Database = {
     dbCache.transactions = dbCache.transactions.filter((t) => t.profileName.toLowerCase() !== name.toLowerCase());
     dbCache.snapshots = dbCache.snapshots.filter((s) => s.profileName.toLowerCase() !== name.toLowerCase());
     dbCache.transfers = dbCache.transfers.filter((t) => t.profileName.toLowerCase() !== name.toLowerCase());
+    dbCache.lots = (dbCache.lots || []).filter((l) => l.profileName.toLowerCase() !== name.toLowerCase());
     delete dbCache.cashBalances[name];
     saveDb();
     return dbCache.profiles.length < initialLen;
@@ -385,6 +388,25 @@ export const Database = {
     dbCache.transfers.push(newRecord);
     saveDb();
     return newRecord;
+  },
+
+  // Lots — one purchase = one row, never merged (rules live in src/server/lots.ts)
+  getLots(profileName: string, options?: { status?: LotStatus; ticker?: string }): Lot[] {
+    return (dbCache.lots || []).filter(
+      (l) =>
+        l.profileName.toLowerCase() === profileName.toLowerCase() &&
+        (!options?.status || l.status === options.status) &&
+        (!options?.ticker || l.ticker.toUpperCase() === options.ticker.toUpperCase())
+    );
+  },
+
+  saveLot(lot: Lot): Lot {
+    if (!Array.isArray(dbCache.lots)) dbCache.lots = [];
+    const index = dbCache.lots.findIndex((l) => l.id === lot.id);
+    if (index >= 0) dbCache.lots[index] = lot;
+    else dbCache.lots.push(lot);
+    saveDb();
+    return lot;
   },
 
   // FX Cache
