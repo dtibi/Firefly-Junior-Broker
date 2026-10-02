@@ -251,6 +251,11 @@ export default function App() {
     d.setMonth(d.getMonth() - 3);
     return d.toISOString().slice(0, 10);
   };
+  // Dates the kid reads: Israeli (day-first) in Hebrew, day-first in English too —
+  // never the American month/day the browser defaults to.
+  const localeTag = locale === 'he' ? 'he-IL' : 'en-GB';
+  const fmtDate = (value: string | number | Date) => new Date(value).toLocaleDateString(localeTag);
+  const fmtDateTime = (value: string | number | Date) => new Date(value).toLocaleString(localeTag);
 
   // Stock directory filtering: category chips + free-text search
   const filteredStocks = stocks.filter((s) => {
@@ -1017,7 +1022,7 @@ export default function App() {
                                         </div>
                                         <div>
                                           <p className="font-extrabold text-slate-800">{h.ticker}</p>
-                                          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{t('dashboard.lastBought')} {new Date(h.lastUpdated).toLocaleDateString()}</p>
+                                          <p className="text-[9px] text-slate-400 uppercase font-bold tracking-wide">{t('dashboard.lastBought')} {fmtDate(h.lastUpdated)}</p>
                                         </div>
                                       </td>
                                       <td className="py-4 px-2 font-extrabold text-slate-700">
@@ -1377,7 +1382,7 @@ export default function App() {
                                             <div className="flex justify-between items-center gap-2">
                                               <span className="text-[11px] font-extrabold text-slate-800">
                                                 {picked ? '☑' : '☐'} ₪{lot.principalLocal.toFixed(2)} ·{' '}
-                                                {new Date(lot.acquiredAt).toLocaleDateString()}
+                                                {fmtDate(lot.acquiredAt)}
                                                 <span className="text-[9px] font-bold text-slate-400">
                                                   {' '}
                                                   {lot.fundingSource === 'POCKET' ? 'מהכיס' : 'מהקרן'}
@@ -1561,7 +1566,7 @@ export default function App() {
                                     {isBuy ? '-' : '+'}₪{tx.fiatAmount.toFixed(2)}
                                   </div>
                                   <p className="text-[10px] text-slate-400 font-bold mt-1">
-                                    {new Date(tx.timestamp).toLocaleString()}
+                                    {fmtDateTime(tx.timestamp)}
                                   </p>
                                 </div>
                               </div>
@@ -1734,7 +1739,7 @@ export default function App() {
                                             {lot.ticker}
                                             <span className="text-[10px] font-bold text-slate-400">
                                               {' '}
-                                              · {new Date(lot.acquiredAt).toLocaleDateString()} ·{' '}
+                                              · {fmtDate(lot.acquiredAt)} ·{' '}
                                               {lot.fundingSource === 'POCKET' ? 'נקנה מהכיס 🍬' : 'נקנה מהקרן 📈'}
                                             </span>
                                           </p>
