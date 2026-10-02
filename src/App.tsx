@@ -1661,8 +1661,12 @@ export default function App() {
                                   <p className="text-[10px] font-extrabold text-slate-500">
                                     {Number(m.month.slice(5, 7))}/{m.month.slice(2, 4)}
                                   </p>
-                                  <p className="text-[10px] font-bold text-emerald-600">+₪{Number(m.inLocal).toFixed(2)}</p>
-                                  <p className="text-[10px] font-bold text-rose-500">−₪{Math.abs(Number(m.outLocal)).toFixed(2)}</p>
+                                  <p className={`text-[10px] font-bold ${Number(m.inLocal) > 0.004 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    {Number(m.inLocal) > 0.004 ? '+' : ''}₪{Number(m.inLocal).toFixed(2)}
+                                  </p>
+                                  <p className={`text-[10px] font-bold ${Number(m.outLocal) < -0.004 ? 'text-rose-500' : 'text-slate-400'}`}>
+                                    {Number(m.outLocal) < -0.004 ? '−' : ''}₪{Math.abs(Number(m.outLocal)).toFixed(2)}
+                                  </p>
                                   <p className="text-[10px] font-extrabold text-slate-700">
                                     ₪{Number(m.endBalanceLocal).toFixed(2)}
                                   </p>
