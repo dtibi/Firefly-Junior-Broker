@@ -1,217 +1,199 @@
 # 🔥 Firefly Junior Broker
 
-A gamified multi-profile brokerage sandbox that lets kids learn investing by trading **real stocks** with simulated money, backed by a **Firefly III double-entry ledger**. Built for Hebrew-speaking families, with full i18n support.
+A real brokerage, for kids. It was built so two children (8 and 6) could take their weekly
+allowance, watch live stock prices, buy and sell **real companies** with their own money, and see
+exactly what they made or lost — all of it recorded in a **double-entry ledger** (Firefly III)
+where every single shekel can be traced. The whole app is in **Hebrew**, because a kid who can't
+read the fine print can't learn from it.
 
-Parents control the allowance, Firefly III tracks every shekel, and Alpaca provides live market prices — all wrapped in a kid-friendly interface with an AI coach that explains stocks using playground analogies.
+The money is not real, but the prices are — Alpaca market data, to the agora. Nothing is a
+simulation shortcut: when a child buys Intel, a real accounting entry moves the money, and when
+he sells, he gets back exactly what that purchase earned, calculated from the ledger itself.
 
-## Features
+<br>
 
-- **Multi-profile** — each kid gets their own broker account with avatar, PIN, and Firefly III spending/savings/investment accounts
-- **Real market data** — live stock prices from Alpaca Markets, fetched in ONE batched call for the whole catalogue (5-minute cache) + Yahoo Finance for tickers Alpaca doesn't cover (OTC, e.g. NTDOY)
-- **44-ticker directory** — 39 kid-friendly companies + 5 baskets (index/tech/dividend/gold/real-estate ETFs), grouped into 9 categories with search; every stock has a Hebrew explanation and a playground analogy
-- **AI Coach** — Gemini-powered tutorials that explain stocks in age-appropriate language (Hebrew or English)
-- **Double-entry accounting** — trades execute real Firefly III transfers using the "Bank of Dad" clearance pattern
-- **Honest numbers** — the performance chart's baseline is the money that really came in from outside (allowance, work income, pocket-money transfers), computed live from Firefly III. Allowances never show up as investment profit
-- **Two accounts per kid** — 🍬 pocket money (spending) and 📈 the investing account (its liquid balance = the fund's cash + the stocks at their live value), with a real profit figure
-- **No transfers between them** — money enters the investing account only by buying stock (paid from the pocket or the fund) and leaves it only by selling a lot, which returns the money to the account the lot came from
-- **Lots ("מגרשים")** — every purchase is its own row, never merged: the kid picks the exact lots to sell, each showing its own profit/loss, with a "select all" button
-- **Bank statement ("החשבון שלי")** — every movement of both accounts in Hebrew, with a running balance, a monthly in/out summary, and a built-in check that the statement ends exactly on the live Firefly balance
-- **Live balance sync** — all account balances read directly from Firefly III, not a local cache
-- **i18n / RTL** — full Hebrew translation, automatic language detection, RTL layout support
-- **Performance charts** — hand-rolled SVG charts: portfolio value vs money-in-from-outside, plus real 30-day price history per stock
-- **PIN security** — 4-digit PINs hashed with SHA-256, required for login and every trade
+## Why it exists
 
-## Tech Stack
+> "Dad, can I buy Nintendo?"
 
-| Layer | Technology |
+Because that question deserves better than *"you're too young"*. This app turns it into a lesson
+about saving, patience, ownership, and losing money — which happens, and is the most valuable part.
+
+- **Real prices, not made-up ones.** Kids spot fake numbers instantly. Every price, every chart
+  and every profit figure comes from live market data.
+- **A real ledger, not a spreadsheet.** Every purchase opens a journal entry in Firefly III. The
+  parents' own finance instance holds the children's accounts — the same tool the family already
+  trusts, so "where did my money go?" is always answerable with a transaction id.
+- **Honest profit.** The app never counts an allowance as investment success. The chart separates
+  *money that came in from outside* from *money the market actually earned*.
+- **No black boxes and no cheating.** Money cannot be moved between accounts, PINs gate every
+  trade, and every rule is enforced on the server and covered by tests.
+- **In Hebrew, from end to end.** Including the stock explanations, the error messages and the
+  bank statement — written the way a child reads, not the way an accountant writes.
+
+<br>
+
+## What the kid sees
+
+### The vault — the whole picture at a glance
+![Dashboard](assets/screenshots/01-dashboard.png)
+
+Two accounts, one honest profit figure, and a chart with two lines: what he owns (blue) and what
+was actually put in from outside (dashed). The gap between them is the only real profit.
+
+### The market — 44 companies and baskets a child has heard of
+![Market](assets/screenshots/02-market.png)
+
+Google, Minecraft's Microsoft, Roblox, Nintendo, McDonald's, Tesla — plus baskets that hold 500
+companies at once, so "don't put all your eggs in one basket" is something he can do, not just hear.
+Live prices, in shekels, updated from the market.
+
+### Every stock explains itself
+![Stock detail](assets/screenshots/03-stock.png)
+
+What the company actually does (in Hebrew, with a playground analogy), a real 30-day price chart,
+and an AI coach that answers a kid's questions in a kid's language.
+
+### Buy from the pocket or the fund — then sell the exact purchases you own
+![Trading](assets/screenshots/04-trade.png)
+
+Buying asks which money pays: pocket money (🍬) or the investment fund (📈). Selling shows every
+purchase he made, one by one, each with its own profit — and he chooses which ones to sell.
+
+### The pocket account — a bank statement he can read
+![Pocket statement](assets/screenshots/05-account-pocket.png)
+
+Allowance in, spending out, a running balance after every movement, and a monthly summary. This is
+where pocket money finally becomes a visible thing instead of an abstract number.
+
+### The investing account — including the part grown-ups get wrong
+![Investing statement](assets/screenshots/06-account-invest.png)
+
+A purchase swaps cash for stock, so the account's value doesn't change — the app says so out loud
+instead of printing "+0.00". Profit and loss are named after the stock that was sold
+(*"רווח במכירת TSLA"*), never after the parent who settles it.
+
+### Every purchase is its own lot, with its own story
+![Lots](assets/screenshots/07-lots.png)
+
+₪14 of Intel in August and ₪32 in September are two separate purchases with two separate results —
+so the kid sees that investing well is a series of decisions, not one lucky guess.
+
+<br>
+
+## How the money works
+
+**Two accounts.** 🍬 *pocket money* (spending) and 📈 *the investing account* (its balance is the
+fund's cash **plus** the stocks at market value). The kid sees both, all the time.
+
+**Allowance.** The parent records it in Firefly III — into the pocket, the fund or both. The app
+reads live balances from the ledger, so it shows up immediately, and it is never counted as
+investment profit.
+
+**Buying.** The kid picks a company and picks which money pays. That decision binds the purchase
+for life:
+
+| Paid from | The money returns to |
 |---|---|
-| Frontend | React 19, TypeScript, Tailwind CSS 4, motion (Framer Motion) |
-| Backend | Express 4, tsx (dev), esbuild (prod) |
-| Build | Vite 6 (client), esbuild (server bundle) |
-| Market Data | Alpaca Markets API + Yahoo Finance |
-| AI | Google Gemini (gemini-3.5-flash) |
-| Ledger | Firefly III REST API |
-| FX Rates | open.er-api.com (ILS→USD, 1-hour cache) |
-| Database | File-based JSON (`data/db.json`) |
+| 🍬 pocket | the pocket — principal *and* profit |
+| 📈 fund | the fund — principal *and* profit |
 
-## Prerequisites
+**Lots ("עסקאות").** Every purchase is its own row, never merged with others. The kid sells
+*whole purchases he chooses* (with a "select all" button for the impatient), each priced from its
+own principal — not from a weighted average.
 
-- **Node.js** 18+
-- **Firefly III** — a running instance (self-hosted or cloud). You'll create asset accounts for each child.
-- **Alpaca Markets** account — free tier (paper trading) works. The app uses the market data API at `data.alpaca.markets`.
-- **Google Gemini** API key — for the AI Coach feature.
+**Selling.** The principal goes back where it came from, and the market result is posted as its
+own entry: a gain comes from the *Bank of Dad* clearance account, a loss goes to it. So profit is
+never confused with an allowance, and a loss is a real loss.
 
-## Quick Start
+**No transfers, ever.** There is no path from the investing account back to the pocket except
+selling what he bought, and none from the pocket to the investing account except buying. That
+single guarantee is what makes the two accounts mean something.
+
+**Everything lands in one bank statement** ("החשבון שלי"): every movement of both accounts in
+Hebrew, with a running balance and a monthly summary — and a built-in check that the statement
+ends exactly on the balance Firefly III reports. If it ever didn't, the page says so instead of
+showing numbers.
+
+<br>
+
+## What the parent gets
+
+- **Honest performance numbers.** The chart's baseline is recomputed from the ledger every time:
+  opening balances + money in from outside − money out. Allowances can never show up as returns,
+  and `profit = invested wealth − baseline = realized + unrealized`, verified to the agora.
+- **Their own ledger.** Self-hosted Firefly III, no cloud, no lock-in, the same double-entry book
+  the family already uses for everything else.
+- **A complete audit trail.** Every trade is a Firefly transaction with an id, a description that
+  names the lot, and a date. Any number on screen can be traced back to journal entries.
+- **Guardrails.** Minimum order ₪10, no buying more than the account holds, no selling a lot that
+  doesn't exist, no returning a lot's money to the wrong account, a 4-digit PIN (SHA-256 hashed)
+  for login and for every trade, and no way to move money between accounts.
+- **One place for both kids.** Each child has an avatar, a PIN, their own three Firefly accounts
+  and their own book — plus a Bank-of-Dad account that clears the trading results.
+
+<br>
+
+## Quick start
 
 ```bash
-# 1. Clone and install
 git clone https://github.com/dtibi/Firefly-Junior-Broker.git
 cd Firefly-Junior-Broker
 npm install
 
-# 2. Configure environment
-cp .env.example .env
-# Edit .env with your API keys and Firefly III details (see below)
-
-# 3. Run
-npm run dev
-# → http://localhost:3000
+cp .env.example .env      # fill in your keys (below)
+npm run dev               # → http://localhost:3000
 ```
 
-## Environment Variables
+**Prerequisites:** Node.js 18+, a running **Firefly III** instance, an **Alpaca** account (the free
+tier is enough — used for market data only) and a **Google Gemini** API key for the AI coach.
 
-Copy `.env.example` to `.env` and fill in:
+### Environment
 
 ```bash
-# Firefly III — your self-hosted instance
-FIREFLY_INSTANCE_URL="http://localhost"          # or https://firefly.your-domain.com
-FIREFLY_PERSONAL_ACCESS_TOKEN="ey..."            # from Firefly III profile → OAuth
+FIREFLY_INSTANCE_URL="http://localhost"       # your Firefly III instance
+FIREFLY_PERSONAL_ACCESS_TOKEN="ey..."         # Firefly III profile → OAuth
 
-# Bank of Dad — the parent's asset account ID in Firefly III
-# This account funds allowances and absorbs losses
-BANK_OF_DAD_ACCOUNT_ID="25"
+BANK_OF_DAD_ACCOUNT_ID="25"                   # the parent's clearing asset account
 
-# Alpaca Markets — for live stock prices (paper trading keys work)
-ALPACA_API_KEY_ID="PK..."
+ALPACA_API_KEY_ID="PK..."                     # live prices (paper keys work)
 ALPACA_API_SECRET_KEY="..."
 
-# Google Gemini — for the AI Coach
-GEMINI_API_KEY="..."
+GEMINI_API_KEY="..."                          # AI coach
 
-# Optional
-APP_URL="http://localhost:3000"
+APP_URL="http://localhost:3000"               # optional
 ```
 
-## Firefly III Setup
+### Firefly III accounts
 
-Each child needs three asset accounts in Firefly III:
+Each child needs three asset accounts, plus one clearing account for the parent:
 
-| Account | Type | Role | Example Name |
+| Account | Type | Role | Example |
 |---|---|---|---|
-| Spending | Asset | `defaultAsset` | "Natanel" (pocket money) |
-| Savings | Asset | `savingAsset` | "Natanel Savings" (the invest fund) |
-| Investment | Asset | `savingAsset` | "Natanel Investments" (vested principal) |
+| Spending | asset | pocket money | "Natanel" |
+| Savings | asset | the invest fund | "Natanel Savings" |
+| Investment | asset | the stocks' book value | "Natanel Investments" |
+| Bank of Dad | asset | settles trading profit/loss | "Bank of Dad: Portfolio Clearing" |
 
-Plus one parent clearinghouse account:
-| Account | Type | Role | Name |
-|---|---|---|---|
-| Bank of Dad | Asset | `defaultAsset` | "Bank of Dad: Portfolio Clearing" |
+Enter the four account ids when you create the profile in the app.
 
-When creating a profile in the app, enter the Firefly III account IDs for that child's spending, savings and investment accounts.
+### What lands in the ledger
 
-### How the ledger works
+| Event | Entries in Firefly III |
+|---|---|
+| Buy from the pocket | spending → investment (one purchase = one lot) |
+| Buy from the fund | savings → investment (one purchase = one lot) |
+| Sell a lot (profit) | investment → origin (principal) + Bank of Dad → origin (gain) |
+| Sell a lot (loss) | investment → origin (value) + investment → Bank of Dad (loss) |
+| Allowance / work income | revenue → pocket and/or fund (a deposit) |
+| Between the two accounts | **nothing — there is no such path, by design** |
 
-**BUY trade (paid from the pocket):** spending → investment (one transfer, one new lot)
-**BUY trade (paid from the fund):** savings → investment (one transfer, one new lot)
-**SELL trade (profit):** investment → the account the lot came from (principal return) + Bank of Dad → that same account (profit reward)
-**SELL trade (loss):** investment → the account the lot came from (current value only) + investment → Bank of Dad (loss adjustment)
-**Allowance / work income:** revenue account → savings and/or spending (a Firefly *deposit*)
-**Between the two accounts:** nothing — there is no transfer path, by design
+<br>
 
-This teaches kids that money never vanishes — it always moves between accounts in a structured double loop.
+## The stock shelf
 
-### How the numbers add up (the chart baseline)
-
-The performance chart draws two lines: the invested wealth (invest fund + stock market value)
-and the money that came in from outside. The baseline is **not** a stored number — it is
-recomputed from the Firefly III journal every time:
-
-```
-baseline = opening balances
-         + every flow INTO the kid's accounts from outside (allowance, work income, gifts)
-         − every flow OUT (spending, transfers to accounts outside the kid's set)
-         [flows with the Bank of Dad account are EXCLUDED — they ARE the trading profit/loss]
-```
-
-So `invested profit = invested wealth − baseline`, which equals
-`realized profit (routed through Bank of Dad) + unrealized market gains` — verified against the
-ledger to the agora. Allowances can never be mistaken for investment returns.
-
-`POST /api/admin/recalc-snapshots` rebuilds the baseline of all historical snapshots from the
-real deposit history (safe to re-run after changing account structure).
-
-## Project Structure
-
-```
-├── server.ts              # Express server, all API routes
-├── src/
-│   ├── main.tsx           # React entry point
-│   ├── App.tsx            # Main UI component
-│   ├── types.ts           # Shared TypeScript types
-│   ├── index.css          # Tailwind + RTL styles
-│   ├── components/
-│   │   ├── PinPad.tsx     # 4-digit PIN entry modal
-│   │   ├── AiCoachModal.tsx  # Gemini AI stock tutorial
-│   │   └── PerformanceChart.tsx  # SVG portfolio chart
-│   ├── i18n/
-│   │   ├── LocaleContext.tsx   # React context provider
-│   │   ├── translations.ts    # EN + HE dictionary
-│   │   └── useTranslation.ts  # Hook
-│   └── server/
-│       ├── db.ts          # JSON database
-│       ├── migrate.ts     # Pure schema migrations (unit-tested)
-│       ├── ledger-rules.ts # Pure ledger classification + the statement classifier (no I/O)
-│       ├── lots.ts        # Pure lot rules — one purchase = one lot, sold by selection
-│       ├── rules.ts       # Pure trade rules — the guardrails + arithmetic
-│       ├── alpaca.ts      # Market data service
-│       ├── firefly.ts     # Firefly III integration
-│       └── ai.ts          # Gemini AI service
-├── test/                  # Unit tests (node:test, run with tsx)
-│   ├── ledger-rules.test.ts
-│   ├── statement-rules.test.ts
-│   ├── lots.test.ts
-│   ├── trade-rules.test.ts
-│   ├── stock-catalog.test.ts
-│   └── migrations.test.ts
-├── scripts/
-│   ├── verify-guardrails.ts   # Live guardrail checks against a running server
-│   └── seed-legacy-lots.py    # One-off, audited lots seed (dry-run by default)
-├── data/
-│   └── db.json            # Runtime database (auto-created, gitignored)
-└── CLAUDE.md              # Developer reference
-```
-
-## Commands
-
-```bash
-npm install          # Install dependencies
-npm run dev          # Development server on :3000
-npm run build        # Production build
-npm run start        # Run production build
-npm run lint         # Type-check (tsc --noEmit)
-npm test             # Unit tests (75 tests, no network / no database needed)
-npm run verify:guardrails  # Live checks: invalid trades must be refused (server must be up)
-npm run clean        # Remove dist/ and data/
-```
-
-### Testing before you change something
-
-The money math lives in **pure, I/O-free modules** so it can be tested without a server,
-a Firefly instance or the network:
-
-- `src/server/ledger-rules.ts` — reads Firefly journals into baselines / realized P&L, and classifies the bank statement
-- `src/server/lots.ts` — one purchase = one lot: pricing a sale, closing a lot, aggregating
-- `src/server/rules.ts` — buy rules and the funding-source guardrail
-- `src/server/migrate.ts` — old `data/db.json` shapes
-
-`npm test` pins down the rules that must never regress: allowances are never counted as
-profit, opening balances are counted exactly once, `profit = realized + unrealized`, lots are
-never merged and a pocket-funded lot always returns to the pocket, the per-lot three-legged
-sale (`investment → origin` principal, `Dad → origin` profit, `investment → Dad` loss), the
-minimum order size and the 0.01-share slice floor. It also checks that all 44 stocks
-carry a Hebrew name + explanation, that the Alpaca/Yahoo payload parsing still maps the
-live prices, and that the statement classifier labels every split once in Hebrew.
-
-`npm run verify:guardrails` proves the *running server* still refuses bad money requests
-(below-minimum order, sub-0.01 slice, a pocket purchase larger than the pocket, selling a lot
-that does not exist, wrong PIN). Each request is first pushed through the same rules the server
-uses; if the rules say the request would be legal the script refuses to send it, so a "test" can
-never execute a real trade.
-
-## Stocks Available
-
-44 tickers: 39 companies + 5 baskets, in 9 categories. Every stock carries a Hebrew
-explanation plus a playground analogy, shown in the app's *"What is this company?"* box.
+44 tickers — 38 companies a child knows plus 6 baskets, in 9 categories. Every one carries a
+Hebrew name, an explanation and a playground analogy, shown in the *"What is this company?"* box.
 
 ### 🧺 Baskets — סלים
 
@@ -302,16 +284,49 @@ explanation plus a playground analogy, shown in the app's *"What is this company
 | BA | Boeing | בואינג | בואינג בונה מטוסי נוסעים ענקיים וגם חלקים שטסים לחלל. |
 | RKLB | Rocket Lab | רוקט לאב | רוקט לאב משגרת לוויינים קטנים לחלל במחיר זול — 'מונית לחלל'. |
 
-A **basket** (ETF) holds many companies at once — buying one basket is like buying a
-slice of a whole shelf instead of a single box.
+A **basket** (ETF) holds many companies at once — buying one basket is like buying a slice of a
+whole shelf instead of a single box.
 
-## Language Support
+<br>
 
-The app auto-detects Hebrew from browser settings. Click the **HE/EN** button in the nav bar to switch. Hebrew mode enables:
-- RTL layout
-- Translated UI, trade messages, AI coach, and chart labels
-- Hebrew company names in the stock directory
+## Under the hood (short version)
 
-## License
+- **React 19 + TypeScript + Tailwind 4 + Vite** on the front end, **Express 4** on the back,
+  a single JSON file as the app's own store — the *money* lives in Firefly III.
+- **The money rules are pure, I/O-free modules** (`rules.ts`, `lots.ts`, `ledger-rules.ts`,
+  `migrate.ts`) so every guardrail and every shekel of arithmetic is unit-tested without a server,
+  a ledger or the network.
+- **Live market data in one batched call** for the whole catalogue (5-minute cache), with Yahoo
+  Finance for the tickers Alpaca doesn't serve (OTC, e.g. NTDOY).
+- **The statement is derived from the ledger every time** and must reconcile to the live Firefly
+  balance; the performance chart's baseline is rebuilt from the real deposit history.
+- **Hebrew-first RTL UI** with a full English translation, one dictionary for both.
 
-Apache-2.0
+`CLAUDE.md` is the developer reference: architecture, the ledger model, the routes and the
+verification recipe.
+
+### Commands
+
+```bash
+npm run dev                # development server on :3000
+npm run build && npm start # production build
+npm test                   # 78 unit tests — no network, no database
+npm run lint               # tsc --noEmit
+npm run verify:guardrails  # live checks: bad trades must be refused (server must be running)
+```
+
+`npm test` pins the rules that must never regress: allowances are never counted as profit,
+opening balances are counted exactly once, `profit = realized + unrealized`, lots are never merged,
+a pocket-funded lot always returns to the pocket, the three-legged sale, the minimum order and the
+0.01-share floor, all 44 stocks carry Hebrew copy, and the statement labels every split once in
+Hebrew. `npm run verify:guardrails` proves a *running* server still refuses bad money requests —
+and refuses to send any request the rules consider legal, so a test can never execute a real trade.
+
+<br>
+
+## Language & license
+
+The app detects Hebrew from the browser and switches with the **HE/EN** button; Hebrew mode turns
+on RTL and translates the interface, trade messages, the AI coach and the labels the kids read.
+
+Apache-2.0.
