@@ -700,10 +700,20 @@ async function startServer() {
       const movements = rows.map((row) => {
         const tx = txByJournal.get(String(row.journalId));
         if (tx && (row.kind === 'BUY' || row.kind === 'SELL')) {
-          const verb = row.kind === 'BUY' ? 'קנית' : 'מכרת';
+          const amount = Number(tx.fiatAmount).toFixed(2);
+          const investLabel =
+            row.kind === 'BUY'
+              ? `${STATEMENT_LABELS_HE.BUY} — קנית ${tx.shares} מניות ${tx.ticker} ב-₪${amount}`
+              : `${STATEMENT_LABELS_HE.SELL} — מכרת ${tx.shares} מניות ${tx.ticker} ב-₪${amount}`;
+          // The pocket account never holds stock: its side of the movement is money
+          // going to / coming back from the investing account, and it reads that way.
+          const pocketLabel =
+            row.kind === 'BUY'
+              ? `כסף שעבר לחשבון ההשקעות — ₪${amount} לקניית ${tx.ticker}`
+              : `כסף שחזר מחשבון ההשקעות — ₪${amount} ממכירת ${tx.ticker}`;
           return {
             ...row,
-            labelHe: `${STATEMENT_LABELS_HE[row.kind]} — ${verb} ${tx.shares} מניות ${tx.ticker} ב-₪${Number(tx.fiatAmount).toFixed(2)}`,
+            labelHe: row.section === 'POCKET' ? pocketLabel : investLabel,
             ticker: tx.ticker,
             shares: tx.shares,
           };
