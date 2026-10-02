@@ -1687,17 +1687,31 @@ export default function App() {
                                       {kindEmoji(m.kind)} {m.labelHe}
                                     </p>
                                     <p className="text-[10px] font-bold text-slate-400">{m.date ? fmtDate(m.date) : '—'}</p>
+                                    {m.noteHe && (
+                                      <p className="text-[10px] font-bold text-amber-600 mt-0.5 leading-snug">{m.noteHe}</p>
+                                    )}
                                   </div>
                                   <div className="text-right shrink-0">
                                     <p
                                       className={`text-[12px] font-extrabold ${
-                                        m.amountLocal >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                                        m.noteHe
+                                          ? 'text-slate-700'
+                                          : m.amountLocal >= 0
+                                            ? 'text-emerald-600'
+                                            : 'text-rose-500'
                                       }`}
                                     >
                                       {m.amountLocal >= 0 ? '+' : '−'}₪{Math.abs(m.amountLocal).toFixed(2)}
+                                      {m.noteHe && (
+                                        <span className="text-[10px] font-bold text-slate-400">
+                                          {' '}
+                                          {m.kind === 'BUY' ? 'מהמזומן' : 'למזומן'}
+                                        </span>
+                                      )}
                                     </p>
                                     <p className="text-[10px] font-bold text-slate-500">
-                                      יתרה ₪{Number(m.balanceLocal || 0).toFixed(2)}
+                                      {m.section === 'INVEST' ? 'שווי החשבון' : 'יתרה'} ₪
+                                      {Number(m.balanceLocal || 0).toFixed(2)}
                                     </p>
                                   </div>
                                 </div>
@@ -1705,7 +1719,9 @@ export default function App() {
                           </div>
 
                           <p className="text-[10px] font-bold text-slate-400 mt-4 leading-relaxed">
-                            כל תנועה מגיעה מהספר (Firefly III). היתרה בכל שורה היא מה שהיה בחשבון אחרי אותה תנועה.
+                            כל תנועה מגיעה מהספר (Firefly III). היתרה בכל שורה היא מה שהיה בחשבון אחרי אותה
+                            תנועה. בחשבון ההשקעות קנייה ומכירה רק מחליפות מזומן במניות — שווי החשבון משתנה לפי
+                            הרווח או ההפסד של המכירה בלבד.
                           </p>
                         </div>
 

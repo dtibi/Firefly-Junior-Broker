@@ -206,8 +206,8 @@ export const STATEMENT_LABELS_HE: Record<StatementKind, string> = {
   TRANSFER_OUT: 'כסף שיצא',
   BUY: 'קניית מניה',
   SELL: 'מכירת מניה',
-  PROFIT: 'רווח מהבנק של אבא',
-  LOSS: 'הפסד לבנק של אבא',
+  PROFIT: 'רווח במכירת מניה',
+  LOSS: 'הפסד במכירת מניה',
   CORRECTION: 'תיקון',
 };
 
@@ -218,10 +218,14 @@ export interface StatementRow {
   labelHe: string;
   description: string;
   section: StatementSection;
-  /** Effect on that account's total (cash + stock at cost), in local currency. */
+  /** The money that moved in this action (cash out to buy stock, cash in from a sale). */
   amountLocal: number;
-  /** Cash moved, signed from that account's point of view (0 inside the invest account). */
+  /** Effect on that account's total (cash + stock at cost) — a purchase swaps, so 0. */
+  balanceDeltaLocal: number;
+  /** Cash moved, signed from that account's point of view. */
   cashLocal: number;
+  /** A short explanation the UI shows under the row when the two numbers differ. */
+  noteHe?: string;
   shares?: number;
   ticker?: string;
   /** Filled by withRunningBalances(). */
@@ -241,6 +245,11 @@ export interface StatementInput {
 
 function kinderLabel(kind: StatementKind, description: string): string {
   const base = STATEMENT_LABELS_HE[kind];
+  if (kind === 'PROFIT' || kind === 'LOSS') {
+    // Name the stock the result came from: the kid gains or loses on the trade.
+    const ticker = tickerFromDescription(description);
+    return ticker ? `${base.replace('מניה', ticker)}` : base;
+  }
   if (!description) return base;
   // Trade rows written before 2026-10-02 carry English descriptions from Firefly
   // ("Stock Purchase: Buy 0.1352 shares of SPY"). The kid reads Hebrew, so those
@@ -249,6 +258,15 @@ function kinderLabel(kind: StatementKind, description: string): string {
   const hasHebrew = /[\u0590-\u05FF]/.test(description);
   if (!hasHebrew && (kind === 'BUY' || kind === 'SELL')) return base;
   return `${base} — ${description}`;
+}
+
+/** "רווח מהבנק של אבא על מכירת TSLA" / "... Sell 0.0146 shares of TSLA" → TSLA */
+export function tickerFromDescription(description: string): string | null {
+  const hebrew = description.match(/מכירת\s+([A-Z][A-Z.]{0,6})/);
+  if (hebrew) return hebrew[1];
+  const english = description.match(/shares of ([A-Z][A-Z.]{0,6})/);
+  if (english) return english[1];
+  return null;
 }
 
 /**
@@ -280,6 +298,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
       description: input.accountsById[String(accountId)]?.name || '',
       section,
       amountLocal: round2(opening),
+      balanceDeltaLocal: round2(opening),
       cashLocal: round2(opening),
     });
   }
@@ -305,13 +324,16 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
       const base = { journalId, date, description };
 
       // Bank of Dad: the trading profit/loss, never a deposit.
+      // Bank of Dad settles the result of a SALE — the kid is the one who made or
+      // lost the money, so the row carries the stock's name, not "Dad's loss".
       if (src === dadId && dstSection) {
         rows.push({
           ...base,
           kind: 'PROFIT',
-          labelHe: kinderLabel('PROFIT', ''),
+          labelHe: kinderLabel('PROFIT', description),
           section: dstSection,
           amountLocal: round2(amount),
+          balanceDeltaLocal: round2(amount),
           cashLocal: round2(amount),
         });
         continue;
@@ -320,9 +342,10 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
         rows.push({
           ...base,
           kind: 'LOSS',
-          labelHe: kinderLabel('LOSS', ''),
+          labelHe: kinderLabel('LOSS', description),
           section: srcSection,
           amountLocal: round2(-amount),
+          balanceDeltaLocal: round2(-amount),
           cashLocal: round2(-amount),
         });
         continue;
@@ -334,13 +357,33 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
       // ---- inside the kid's own accounts ----
       if (srcSection && dstSection) {
         if (srcSection === dstSection) {
-          // Stays inside one account: cash ↔ stock at cost, or fund ↔ stocks.
+          // Cash ↔ stock inside the investing account. The money that moved is the
+          // purchase (or the sale), so that is what the row shows — but the account's
+          // TOTAL does not change: the cash simply became stock (or back).
           if (src === input.fundId && dst === input.investmentId) {
-            rows.push({ ...base, kind: 'BUY', labelHe: kinderLabel('BUY', description), section: 'INVEST', amountLocal: 0, cashLocal: round2(-amount) });
+            rows.push({
+              ...base,
+              kind: 'BUY',
+              labelHe: kinderLabel('BUY', description),
+              section: 'INVEST',
+              amountLocal: round2(-amount),
+              balanceDeltaLocal: 0,
+              cashLocal: round2(-amount),
+              noteHe: 'החלפת מזומן במניות — שווי החשבון לא משתנה',
+            });
             continue;
           }
           if (src === input.investmentId && dst === input.fundId) {
-            rows.push({ ...base, kind: 'SELL', labelHe: kinderLabel('SELL', description), section: 'INVEST', amountLocal: 0, cashLocal: round2(amount) });
+            rows.push({
+              ...base,
+              kind: 'SELL',
+              labelHe: kinderLabel('SELL', description),
+              section: 'INVEST',
+              amountLocal: round2(amount),
+              balanceDeltaLocal: 0,
+              cashLocal: round2(amount),
+              noteHe: 'המניות הפכו למזומן — שווי החשבון משתנה רק לפי הרווח או ההפסד',
+            });
             continue;
           }
           // fund ↔ investment account (legacy savings moves) — no total change.
@@ -361,8 +404,8 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
           : outKind === 'BUY' || outKind === 'SELL'
             ? outKind
             : 'TRANSFER_IN';
-        rows.push({ ...base, kind: outKind, labelHe: kinderLabel(outKind, description), section: srcSection, amountLocal: round2(-amount), cashLocal: round2(-amount) });
-        rows.push({ ...base, kind: inKind, labelHe: kinderLabel(inKind, description), section: dstSection, amountLocal: round2(amount), cashLocal: round2(amount) });
+        rows.push({ ...base, kind: outKind, labelHe: kinderLabel(outKind, description), section: srcSection, amountLocal: round2(-amount), balanceDeltaLocal: round2(-amount), cashLocal: round2(-amount) });
+        rows.push({ ...base, kind: inKind, labelHe: kinderLabel(inKind, description), section: dstSection, amountLocal: round2(amount), balanceDeltaLocal: round2(amount), cashLocal: round2(amount) });
         continue;
       }
 
@@ -372,7 +415,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
       const moneyIn = Boolean(dstSection);
 
       if (!moneyIn && counterparty.type === 'expense') {
-        rows.push({ ...base, kind: 'SPENDING', labelHe: kinderLabel('SPENDING', description), section: ownSection, amountLocal: round2(-amount), cashLocal: round2(-amount) });
+        rows.push({ ...base, kind: 'SPENDING', labelHe: kinderLabel('SPENDING', description), section: ownSection, amountLocal: round2(-amount), balanceDeltaLocal: round2(-amount), cashLocal: round2(-amount) });
         continue;
       }
       if (moneyIn && counterparty.type === 'revenue') {
@@ -384,7 +427,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
           : /חיסכון/.test(description)
             ? 'SAVING'
             : 'DEPOSIT';
-        rows.push({ ...base, kind, labelHe: kinderLabel(kind, description), section: ownSection, amountLocal: round2(amount), cashLocal: round2(amount) });
+        rows.push({ ...base, kind, labelHe: kinderLabel(kind, description), section: ownSection, amountLocal: round2(amount), balanceDeltaLocal: round2(amount), cashLocal: round2(amount) });
         continue;
       }
 
@@ -395,6 +438,7 @@ export function classifyStatement(journals: LedgerJournal[], input: StatementInp
         labelHe: kinderLabel(kind, description),
         section: ownSection,
         amountLocal: moneyIn ? round2(amount) : round2(-amount),
+        balanceDeltaLocal: moneyIn ? round2(amount) : round2(-amount),
         cashLocal: moneyIn ? round2(amount) : round2(-amount),
       });
     }
@@ -419,7 +463,9 @@ export function withRunningBalances(rows: StatementRow[]): StatementRow[] {
 
   const balances: Record<StatementSection, number> = { POCKET: 0, INVEST: 0 };
   return ordered.map((row) => {
-    balances[row.section] = round2(balances[row.section] + row.amountLocal);
+    // The balance follows the account TOTAL (a purchase swaps cash for stock and
+    // therefore does not change it), while the row shows the money that moved.
+    balances[row.section] = round2(balances[row.section] + row.balanceDeltaLocal);
     return { ...row, balanceLocal: balances[row.section] };
   });
 }
@@ -448,8 +494,12 @@ export function monthlyStatement(rows: StatementRow[]): {
       const month = String(row.date).slice(0, 7) || firstMonth;
       if (!month) continue;
       const bucket = buckets.get(month) || { inLocal: 0, outLocal: 0, endBalanceLocal: 0 };
-      if (row.amountLocal >= 0) bucket.inLocal = round2(bucket.inLocal + row.amountLocal);
-      else bucket.outLocal = round2(bucket.outLocal + row.amountLocal);
+      // "In / out" is real money entering or leaving the account, so it always adds
+      // up to the balance change: a purchase inside the investing account is a swap,
+      // not money out.
+      const delta = row.balanceDeltaLocal ?? row.amountLocal;
+      if (delta >= 0) bucket.inLocal = round2(bucket.inLocal + delta);
+      else bucket.outLocal = round2(bucket.outLocal + delta);
       bucket.endBalanceLocal = round2(row.balanceLocal ?? bucket.endBalanceLocal);
       buckets.set(month, bucket);
     }

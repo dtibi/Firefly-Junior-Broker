@@ -74,20 +74,37 @@ describe('classifyStatement — Hebrew, two accounts', () => {
     assert.equal(STATEMENT_LABELS_HE.SAVING, 'חיסכון אוטומטי');
   });
 
-  test('a purchase inside the invest account does not change its total (cash → stock at cost)', () => {
+  test('a purchase inside the invest account shows the money that moved, not +0.00', () => {
     const rows = classifyStatement([journal('311', '2026-09-17', FUND, INVEST, 32, 'קניית 0.2884 מניות INTC')], input());
     assert.equal(rows.length, 1);
     assert.equal(rows[0].kind, 'BUY');
     assert.equal(rows[0].section, 'INVEST');
-    assert.equal(rows[0].amountLocal, 0, 'the account total is unchanged by a purchase');
+    assert.equal(rows[0].amountLocal, -32, 'the row shows the cash that went into the purchase');
+    assert.equal(rows[0].balanceDeltaLocal, 0, 'the account total itself is unchanged by a purchase');
     assert.equal(rows[0].cashLocal, -32);
+    assert.match(rows[0].noteHe || '', /שווי החשבון לא משתנה/);
   });
 
-  test('selling back into the fund is a SELL row that also leaves the total unchanged', () => {
+  test('selling back into the fund shows the cash coming back and leaves the total unchanged', () => {
     const rows = classifyStatement([journal('341', '2026-10-02', INVEST, FUND, 10, 'מכירת MDLZ')], input());
     assert.equal(rows[0].kind, 'SELL');
-    assert.equal(rows[0].amountLocal, 0);
+    assert.equal(rows[0].amountLocal, 10);
+    assert.equal(rows[0].balanceDeltaLocal, 0);
     assert.equal(rows[0].cashLocal, 10);
+  });
+
+  test('the running balance follows the account total, so a purchase leaves it flat', () => {
+    const rows = classifyStatement(
+      [
+        journal('op', '2026-09-01', null, INVEST, 100, 'יתרת פתיחה'),
+        journal('buy', '2026-09-02', FUND, INVEST, 40, 'קניית 0.1 מניות SPY'),
+      ],
+      input()
+    );
+    const balanced = withRunningBalances(rows);
+    assert.equal(balanced[0].balanceLocal, 100);
+    assert.equal(balanced[1].amountLocal, -40);
+    assert.equal(balanced[1].balanceLocal, 100, 'buying stock does not change the account value');
   });
 
   test('a pocket-funded purchase moves money from the pocket into the investing account', () => {
@@ -124,6 +141,26 @@ describe('classifyStatement — Hebrew, two accounts', () => {
     );
     assert.equal(rows.find((r) => r.kind === 'PROFIT')!.amountLocal, 4.93);
     assert.equal(rows.find((r) => r.kind === 'LOSS')!.amountLocal, -0.07);
+  });
+
+  test('a profit or loss row is named after the stock that was sold, never "Dad"', () => {
+    const rows = classifyStatement(
+      [
+        journal('p', '2026-08-25', DAD, INVEST, 0.3, 'רווח מהבנק של אבא על מכירת TSLA'),
+        journal('l', '2026-08-24', INVEST, DAD, 1.19, 'הפסד על מכירת RBLX — הועבר לבנק של אבא'),
+      ],
+      input()
+    );
+    assert.equal(rows.find((r) => r.kind === 'PROFIT')!.labelHe, 'רווח במכירת TSLA');
+    assert.equal(rows.find((r) => r.kind === 'LOSS')!.labelHe, 'הפסד במכירת RBLX');
+  });
+
+  test('translating a profit row written in the old English form still names the stock', () => {
+    const rows = classifyStatement(
+      [journal('p2', '2026-08-25', DAD, INVEST, 0.3, 'Liquidation Investment Profit (Bank of Dad): Sell 0.0584 shares of TSLA')],
+      input()
+    );
+    assert.equal(rows[0].labelHe, 'רווח במכירת TSLA');
   });
 
   test('the ₪19.01 balance correction is labelled as a correction, not as a purchase', () => {
