@@ -36,26 +36,26 @@ about saving, patience, ownership, and losing money — which happens, and is th
 ## What the kid sees
 
 ### The vault — the whole picture at a glance
-![Dashboard](assets/screenshots/01-dashboard.png)
+![Dashboard](assets/screenshots/01-dashboard.png?v=2)
 
 Two accounts, one honest profit figure, and a chart with two lines: what he owns (blue) and what
 was actually put in from outside (dashed). The gap between them is the only real profit.
 
 ### The market — 44 companies and baskets a child has heard of
-![Market](assets/screenshots/02-market.png)
+![Market](assets/screenshots/02-market.png?v=2)
 
 Google, Minecraft's Microsoft, Roblox, Nintendo, McDonald's, Tesla — plus baskets that hold 500
 companies at once, so "don't put all your eggs in one basket" is something he can do, not just hear.
 Live prices, in shekels, updated from the market.
 
 ### Every stock explains itself
-![Stock detail](assets/screenshots/03-stock.png)
+![Stock detail](assets/screenshots/03-stock.png?v=2)
 
 What the company actually does (in Hebrew, with a playground analogy), a real 30-day price chart,
 and an AI coach that answers a kid's questions in a kid's language.
 
 ### Buy from the pocket or the fund — then sell the exact purchases you own
-![Trading](assets/screenshots/04-trade.png)
+![Trading](assets/screenshots/04-trade.png?v=2)
 
 Buying asks which money pays: pocket money (🍬) or the investment fund (📈). Selling shows every
 purchase he made, one by one, each with its own profit — and he chooses which ones to sell. The
@@ -63,20 +63,20 @@ result is named for what it is: *רווח ₪4.00 במכירת SPY — מהשו�
 paid by the market" — never after the grown-up who settles it.
 
 ### The pocket account — a bank statement he can read
-![Pocket statement](assets/screenshots/05-account-pocket.png)
+![Pocket statement](assets/screenshots/05-account-pocket.png?v=2)
 
 Allowance in, spending out, a running balance after every movement, and a monthly summary. This is
 where pocket money finally becomes a visible thing instead of an abstract number.
 
 ### The investing account — including the part grown-ups get wrong
-![Investing statement](assets/screenshots/06-account-invest.png)
+![Investing statement](assets/screenshots/06-account-invest.png?v=2)
 
 A purchase swaps cash for stock, so the account's value doesn't change — the app says so out loud
 instead of printing "+0.00". Profit and loss are named after the stock that was sold
 (*"רווח במכירת TSLA"*), never after the parent who settles it.
 
 ### Every purchase is its own lot, with its own story
-![Lots](assets/screenshots/07-lots.png)
+![Lots](assets/screenshots/07-lots.png?v=2)
 
 ₪14 of Intel in August and ₪32 in September are two separate purchases with two separate results —
 so the kid sees that investing well is a series of decisions, not one lucky guess.
