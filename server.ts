@@ -599,7 +599,14 @@ async function startServer() {
         const financials = await LedgerService.getFinancialBreakdown(p);
         const cashLocal = financials?.accounts.savings?.balance ?? Database.getCashBalance(p.name);
         const pocketLocal = financials?.accounts.checking?.balance ?? 0;
-        const holdings = Database.getHoldings(p.name);
+        // Same source of truth as /api/portfolio: lots win over the legacy
+        // holdings table once a profile has any. A purchase writes ONLY a lot,
+        // so valuing from the holdings table would silently drop newly bought
+        // positions (the 10/07 NFLX incident: the daily chart showed a fake
+        // -36 NIS loss while the live portfolio showed a +14 profit).
+        const storedLots = Database.getLots(p.name);
+        const hasLots = storedLots.length > 0;
+        const holdings = hasLots ? aggregateLots(storedLots, p.name) : Database.getHoldings(p.name);
 
         let totalStockValueUsd = 0;
         for (const h of holdings) {
