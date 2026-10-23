@@ -49,7 +49,7 @@ function initDb(): Schema {
         savingsAccountId: '6',
         investmentAccountId: '26',
         spendingAccountId: '4',
-        transfersEnabled: true,
+        transfersEnabled: false,
         avatar: '🦊',
         cumulativeDeposits: 500.0,
       },

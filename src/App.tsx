@@ -912,7 +912,7 @@ export default function App() {
                         <div className="flex justify-between items-center">
                           <h4 className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('pockets.title')}</h4>
                           <span className="bg-indigo-50 text-indigo-700 font-bold text-[10px] px-2.5 py-1 rounded-full border border-indigo-100">
-                            {lotSummary ? `${lotSummary.openLots} עסקאות 🧩` : ''}
+                            {lotSummary ? `${lotSummary.openLots} עסקאות פתוחות 🧩` : ''}
                           </span>
                         </div>
 
@@ -1280,7 +1280,7 @@ export default function App() {
                                 </div>
 
                                 <div className="relative">
-                                  <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪/$$</span>
+                                  <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪</span>
                                   <input
                                     type="number"
                                     min={10}
@@ -1408,7 +1408,7 @@ export default function App() {
                                     {selectedLots.length > 0 && (
                                       <div className="bg-white border border-slate-200 rounded-2xl p-3 text-[11px] font-bold text-slate-600 space-y-0.5">
                                         <div>
-                                          נבחרו {selectedLots.length} עסקאות · קרן ₪
+                                          נבחרו {selectedLots.length} עסקאות · שילמת ₪
                                           {selectedLotsTotals.principal.toFixed(2)}
                                         </div>
                                         <div>תקבל עכשיו {money(selectedLotsTotals.value)}</div>
@@ -1603,7 +1603,17 @@ export default function App() {
                       <>
                         {/* The TWO accounts */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {(statement.accounts || []).map((acc: any) => (
+                          {(statement.accounts || []).map((acc: any) => {
+                            // The investing account's headline is what the kid could get for it
+                            // today: cash + market value (same number as the dashboard card).
+                            // The books carry what he PAID for the shares, not what the market
+                            // says they are worth, so the book figure reads as a second line.
+                            const bookCash = Number(acc.cashLocal || 0);
+                            const bookStocks = Number(acc.stocksLocal || 0);
+                            const marketCash = acc.key === 'INVEST' ? (summary?.investFundLocal ?? bookCash) : bookCash;
+                            const marketStocks = acc.key === 'INVEST' ? (summary?.stocksLocal ?? bookStocks) : bookStocks;
+                            const headline = acc.key === 'INVEST' ? marketCash + marketStocks : Number(acc.balanceLocal || 0);
+                            return (
                             <button
                               key={acc.key}
                               onClick={() => setStatementSection(acc.key)}
@@ -1619,18 +1629,23 @@ export default function App() {
                                     {acc.key === 'POCKET' ? '🍬' : '📈'} {acc.labelHe}
                                   </p>
                                   {acc.key === 'INVEST' && (
-                                    <p className="text-[10px] font-bold text-slate-500 mt-1">
-                                      מזומן ₪{Number(acc.cashLocal || 0).toFixed(2)} + מניות ₪
-                                      {Number(acc.stocksLocal || 0).toFixed(2)}
-                                    </p>
+                                    <div className="mt-1 space-y-0.5">
+                                      <p className="text-[10px] font-bold text-slate-500">
+                                        מזומן ₪{marketCash.toFixed(2)} + מניות ₪{marketStocks.toFixed(2)}
+                                      </p>
+                                      <p className="text-[10px] font-bold text-slate-400">
+                                        לפי הספר (מה ששילמת): ₪{Number(acc.balanceLocal || 0).toFixed(2)}
+                                      </p>
+                                    </div>
                                   )}
                                 </div>
                                 <p className="text-2xl font-extrabold text-slate-900">
-                                  ₪{Number(acc.balanceLocal || 0).toFixed(2)}
+                                  ₪{headline.toFixed(2)}
                                 </p>
                               </div>
                             </button>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         {!statement.reconciled && (
@@ -1769,8 +1784,8 @@ export default function App() {
                                             </span>
                                           </p>
                                           <p className="text-[10px] font-bold text-slate-500">
-                                            {lot.shares.toFixed(4)} מניות · קרן ₪{lot.principalLocal.toFixed(2)} · מחיר קנייה $
-                                            {lot.priceUsdAtBuy.toFixed(2)}
+                                            {lot.shares.toFixed(4)} מניות · {lot.fundingSource === 'POCKET' ? 'כיס' : 'קרן'} ₪{lot.principalLocal.toFixed(2)} · מחיר קנייה $
+                                            {(lot.principalUsd / lot.shares).toFixed(2)}
                                           </p>
                                         </div>
                                       </div>
