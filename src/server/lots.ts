@@ -19,7 +19,7 @@
  *    the loss → the clearing account; break-even: no adjustment leg at all).
  */
 
-import { CurrencyMode, FundingSource, Holding, Lot } from '../types.js';
+import { CurrencyMode, FundingSource, Holding, Lot, SellReasonCode } from '../types.js';
 import { MIN_SHARE_FRACTION, RuleResult } from './rules.js';
 
 const round4 = (v: number) => Number(v.toFixed(4));
@@ -214,8 +214,16 @@ export function planLotSales(params: {
   return { ok: true, value: { sales, totals } };
 }
 
-/** Closes a lot that was sold in full, recording its realized result. */
-export function closeLot(params: { lot: Lot; sale: LotSale; closedAt: string }): Lot {
+/** Closes a lot that was sold in full, recording its realized result and why it was sold. */
+export function closeLot(params: {
+  lot: Lot;
+  sale: LotSale;
+  closedAt: string;
+  /** The button the kid picked before the sale — text only, never money. */
+  sellReasonCode?: SellReasonCode;
+  /** The market price each share was sold for (USD). */
+  soldPriceUsd?: number;
+}): Lot {
   return {
     ...params.lot,
     shares: 0,
@@ -224,6 +232,10 @@ export function closeLot(params: { lot: Lot; sale: LotSale; closedAt: string }):
     status: 'CLOSED',
     realizedPnlLocal: round2(params.sale.deltaLocal),
     closedAt: params.closedAt,
+    ...(params.sellReasonCode ? { sellReasonCode: params.sellReasonCode } : {}),
+    ...(Number.isFinite(params.soldPriceUsd)
+      ? { soldPriceUsd: Number((params.soldPriceUsd as number).toFixed(2)) }
+      : {}),
   };
 }
 

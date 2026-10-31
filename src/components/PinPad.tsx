@@ -17,8 +17,8 @@ interface PinPadProps {
 }
 
 export default function PinPad({
-  title = 'Enter Security PIN',
-  subtitle = 'Type your 4-digit secret code',
+  title,
+  subtitle,
   onVerify,
   onCancel,
   error: initialError,
@@ -39,7 +39,7 @@ export default function PinPad({
       const ok = await onVerify(newPin);
       setIsVerifying(false);
       if (!ok) {
-        setError('Incorrect PIN! Try again.');
+        setError(t('pinPad.incorrectPin'));
         setPin('');
       }
     }
@@ -79,8 +79,8 @@ export default function PinPad({
         </div>
 
         <div className="text-center mt-2 mb-6">
-          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{title}</h3>
-          <p className="text-xs text-slate-500 font-medium mt-1">{subtitle}</p>
+          <h3 className="text-2xl font-black text-slate-800 tracking-tight">{title || t('pinPad.enterPin')}</h3>
+          <p className="text-xs text-slate-500 font-medium mt-1">{subtitle || t('pinPad.secretPrompt')}</p>
         </div>
 
         {/* PIN Bubble Display */}

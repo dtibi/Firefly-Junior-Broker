@@ -36,10 +36,10 @@ export default function AiCoachModal({
         if (data.success) {
           setGuideText(data.guide);
         } else {
-          setError(data.error || 'Coach Firefly is currently resting in her fairy forest. Try again in a minute!');
+          setError(data.error || t('aiCoach.resting'));
         }
       } catch (err: any) {
-        setError('Could not connect to the fairy forest server!');
+        setError(t('aiCoach.cannotConnect'));
       } finally {
         setIsLoading(false);
       }

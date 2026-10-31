@@ -48,6 +48,17 @@ export type FundingSource = 'POCKET' | 'FUND';
 export type LotStatus = 'OPEN' | 'CLOSED';
 
 /**
+ * Why the kid sold, chosen by him before every sale. Text only — it never moves
+ * money; the buttons live in src/sell-reasons.ts.
+ */
+export type SellReasonCode =
+  | 'COMPANY_CHANGED'
+  | 'NEED_MONEY'
+  | 'AFRAID_OF_DROP'
+  | 'SWITCHING'
+  | 'OTHER';
+
+/**
  * One purchase = one lot ("מגרש"). Lots are never merged: the kid picks the
  * specific lots he wants to sell, and the lot's origin binds its money for life
  * (pocket-funded → the sale returns to the pocket, fund-funded → to the fund).
@@ -72,6 +83,11 @@ export interface Lot {
   /** Realized gain/loss in local currency — set when the lot is closed. */
   realizedPnlLocal?: number;
   closedAt?: string;
+  /** Why he sold it — the reason he picked when the lot was sold. */
+  sellReasonCode?: SellReasonCode;
+  /** The market price (USD) each share was sold for — lets the app show what the
+   *  price did after the sale. */
+  soldPriceUsd?: number;
 }
 
 export interface Transaction {
@@ -85,6 +101,10 @@ export interface Transaction {
   fiatAmount: number; // in child's profile currency
   fireflyTransactionId: string;
   timestamp: string;
+  /** Why he sold — required on a SELL, absent on a BUY. Text only. */
+  sellReasonCode?: SellReasonCode;
+  /** His own words, only with the "משהו אחר" button. */
+  sellReasonNote?: string;
 }
 
 export interface PortfolioSnapshot {

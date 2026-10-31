@@ -32,7 +32,8 @@ import {
   STATEMENT_LABELS_HE,
 } from './src/server/ledger-rules.js';
 import { AIService } from './src/server/ai.js';
-import { FundingSource, TradeRequest, TradeResponse } from './src/types.js';
+import { FundingSource, SellReasonCode, TradeRequest, TradeResponse } from './src/types.js';
+import { isSellReasonCode, sellReasonHe, SELL_REASON_NOTE_MAX } from './src/sell-reasons.js';
 
 const PORT = 3000;
 
@@ -488,6 +489,23 @@ async function startServer() {
       // SELL Transaction Engine — the kid picks the lots HE bought; every sold lot
       // returns its money to the account it came from (pocket or invest fund).
       if (type === 'SELL') {
+        // Why he sold: he has to pick one of the buttons (approved 2026-10-31).
+        // It is TEXT — it never touches an amount, a leg or a destination.
+        const rawReason = (req.body as any).sellReasonCode;
+        if (!isSellReasonCode(rawReason)) {
+          return res.status(400).json({
+            success: false,
+            error: 'צריך לבחור למה אתה מוכר לפני שאפשר לאשר את המכירה.',
+          });
+        }
+        const sellReasonCode = rawReason as SellReasonCode;
+        const rawNote = (req.body as any).sellReasonNote;
+        const sellReasonNote =
+          sellReasonCode === 'OTHER' && typeof rawNote === 'string'
+            ? rawNote.trim().slice(0, SELL_REASON_NOTE_MAX)
+            : '';
+        const reasonHe = sellReasonHe(sellReasonCode, sellReasonNote);
+
         const requestedIds: string[] = Array.isArray((req.body as any).lotIds)
           ? (req.body as any).lotIds.map((v: any) => String(v))
           : [];
@@ -527,11 +545,20 @@ async function startServer() {
             fundAccountId: profile.savingsAccountId,
             pocketAccountId: profile.spendingAccountId || '',
             investmentAccountId: profile.investmentAccountId,
+            reasonHe,
           });
           journalIds.push(posted.principalTransferId);
           if (posted.adjustmentTransferId) journalIds.push(posted.adjustmentTransferId);
 
-          Database.saveLot(closeLot({ lot, sale, closedAt: new Date().toISOString() }));
+          Database.saveLot(
+            closeLot({
+              lot,
+              sale,
+              closedAt: new Date().toISOString(),
+              sellReasonCode,
+              soldPriceUsd: quote.priceUsd,
+            })
+          );
         }
 
         // Keep local cache in sync with Firefly III for fallback resilience
@@ -551,6 +578,8 @@ async function startServer() {
           fxRate: fxFactor,
           fiatAmount: Number(totals.currentValueLocal.toFixed(2)),
           fireflyTransactionId: journalIds[0] || '',
+          sellReasonCode,
+          ...(sellReasonNote ? { sellReasonNote } : {}),
         });
 
         const destinations = new Set(sales.map((s) => s.destination));
@@ -569,7 +598,8 @@ async function startServer() {
           success: true,
           message:
             `מכרת ${sales.length === 1 ? 'עסקה אחת' : `${sales.length} עסקאות`} של ${ticker} תמורת `
-            + `₪${totals.currentValueLocal.toFixed(2)}; הכסף חזר ${backHe}. ${resultHe}`,
+            + `₪${totals.currentValueLocal.toFixed(2)}; הכסף חזר ${backHe}. ${resultHe}`
+            + (reasonHe ? ` הסיבה שרשמת: ${reasonHe}.` : ''),
           transaction: tx,
           sales,
           journalIds,
@@ -725,6 +755,10 @@ async function startServer() {
             labelHe: row.section === 'POCKET' ? pocketLabel : investLabel,
             ticker: tx.ticker,
             shares: tx.shares,
+            // Why he sold it, in his words — shown under the sale row (Hebrew).
+            ...(row.kind === 'SELL'
+              ? { reasonHe: sellReasonHe(tx.sellReasonCode, tx.sellReasonNote) }
+              : {}),
           };
         }
         return row;

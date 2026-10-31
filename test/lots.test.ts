@@ -215,6 +215,28 @@ describe('lots — selling one lot (three-legged ledger per lot)', () => {
     assert.equal(summary.realizedPnlLocal, 2.61);
   });
 
+  test('a closed lot keeps why he sold and the price he sold at', () => {
+    // His own INTC lot #2 — sold on 30.10.2026 at $69.15, exactly as journal 376 has it.
+    const lot = makeLot({ id: 'lot-reason' });
+    const priced = planLotSale({ lot, priceUsd: 69.15, currencyMode: 'PARITY', fxRate: 1 });
+    const closed = closeLot({
+      lot,
+      sale: priced.value!,
+      closedAt: '2026-10-30T12:06:17.976Z',
+      sellReasonCode: 'AFRAID_OF_DROP',
+      soldPriceUsd: 69.15,
+    });
+    assert.equal(closed.realizedPnlLocal, -12.06);
+    assert.equal(closed.sellReasonCode, 'AFRAID_OF_DROP');
+    assert.equal(closed.soldPriceUsd, 69.15);
+
+    // A sale with no reason on record (everything sold before 2026-10-31) must not
+    // grow an empty field — the kid's screens show "—" for it.
+    const without = closeLot({ lot, sale: priced.value!, closedAt: '2026-10-30T12:06:17.976Z' });
+    assert.equal(without.sellReasonCode, undefined);
+    assert.equal(without.soldPriceUsd, undefined);
+  });
+
   test('rejects an empty selection, mixed tickers, a sold lot and dust', () => {
     const empty = planLotSales({ lots: [], priceUsd: 100, currencyMode: 'PARITY', fxRate: 1 });
     assert.equal(empty.ok, false);

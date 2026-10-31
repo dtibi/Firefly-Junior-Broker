@@ -40,6 +40,10 @@ const en = {
     investmentAccountId: 'Firefly Investment Sub-Account ID',
     cancel: 'Cancel',
     submit: 'ADD BROKER CODE!',
+    required: 'Profile name and a 4-digit security PIN are required!',
+    createdPrefix: 'Profile created successfully! Log in with PIN',
+    failedPrefix: 'Failed to create profile:',
+    noServer: 'Could not connect to the creation server.',
   },
 
   dashboard: {
@@ -82,6 +86,8 @@ const en = {
     investFund: 'Invest Fund',
     moneyFromOutside: 'Money In From Outside',
     realProfit: 'Real Profit',
+    snapshotDone: 'Nightly ledger snapshot recorded successfully!',
+    snapshotFailed: 'Could not record snapshot.',
   },
 
   pockets: {
@@ -125,6 +131,9 @@ const en = {
     searchPlaceholder: 'Search a company or a ticker…',
     allCategories: 'ALL',
     whatIsThis: 'What is this company?',
+    sellReasonTitle: 'Why are you selling? (pick one)',
+    sellReasonNotePlaceholder: 'What happened? (up to 40 characters)',
+    sellReasonRequired: 'Pick why you are selling before confirming.',
   },
 
   ledger: {
@@ -181,6 +190,7 @@ const en = {
     incorrectPin: 'Incorrect PIN! Try again.',
     protectedBy: 'מוגן על ידי ספר חשבונות כפול',
     clear: 'CLEAR',
+    secretPrompt: 'Type your 4-digit secret code',
   },
 
   aiCoach: {
@@ -235,6 +245,7 @@ const en = {
     profileNotFound: 'Profile not found.',
     incorrectPin: 'Incorrect 4-digit PIN! Authorization failed.',
     missingParams: 'Missing core trade execution parameters.',
+    cannotReachLedger: 'Could not contact the trade execution ledger.',
   },
 };
 
@@ -275,6 +286,10 @@ const he: typeof en = {
     investmentAccountId: 'מזהה חשבון השקעות בפיירפליי',
     cancel: 'ביטול',
     submit: 'הוסף קוד ברוקר!',
+    required: 'שם וקוד סודי בן 4 ספרות הם שדות חובה!',
+    createdPrefix: 'הפרופיל נוצר בהצלחה! התחבר עם הקוד',
+    failedPrefix: 'יצירת הפרופיל נכשלה:',
+    noServer: 'לא ניתן היה להתחבר לשרת היצירה.',
   },
 
   dashboard: {
@@ -317,6 +332,8 @@ const he: typeof en = {
     investFund: 'קרן ההשקעה',
     moneyFromOutside: 'כסף שנכנס מבחוץ',
     realProfit: 'רווח אמיתי',
+    snapshotDone: 'תמונת המצב היומית נרשמה בהצלחה!',
+    snapshotFailed: 'לא ניתן היה לרשום תמונת מצב.',
   },
 
   pockets: {
@@ -360,6 +377,9 @@ const he: typeof en = {
     searchPlaceholder: 'חיפוש חברה או טיקר…',
     allCategories: 'הכל',
     whatIsThis: 'מה זו החברה הזאת?',
+    sellReasonTitle: 'למה אתה מוכר? (חובה לבחור)',
+    sellReasonNotePlaceholder: 'מה הסיבה? (עד 40 תווים)',
+    sellReasonRequired: 'צריך לבחור למה אתה מוכר לפני אישור המכירה.',
   },
 
   ledger: {
@@ -416,6 +436,7 @@ const he: typeof en = {
     incorrectPin: 'קוד שגוי! נסה שוב.',
     protectedBy: 'מוגן על ידי ספר חשבונות כפול',
     clear: 'נקה',
+    secretPrompt: 'הקלד את הקוד הסודי בן 4 הספרות שלך',
   },
 
   aiCoach: {
@@ -470,6 +491,7 @@ const he: typeof en = {
     profileNotFound: 'הפרופיל לא נמצא.',
     incorrectPin: 'קוד סודי בן 4 ספרות שגוי! האישור נכשל.',
     missingParams: 'חסרים פרמטרים לביצוע העסקה.',
+    cannotReachLedger: 'לא ניתן היה להתחבר לספר החשבונות לביצוע העסקה.',
   },
 };
 

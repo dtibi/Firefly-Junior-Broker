@@ -33,7 +33,8 @@ import {
   Wallet,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Profile, Holding, Transaction, StockQuote, PortfolioSnapshot } from './types.js';
+import { Profile, Holding, Transaction, StockQuote, PortfolioSnapshot, SellReasonCode } from './types.js';
+import { SELL_REASONS, SELL_REASON_NOTE_MAX, sellReasonLabelHe } from './sell-reasons.js';
 import PinPad from './components/PinPad.tsx';
 import AiCoachModal from './components/AiCoachModal.tsx';
 import PerformanceChart from './components/PerformanceChart.tsx';
@@ -68,6 +69,10 @@ export default function App() {
   const [accounts, setAccounts] = useState<any>(null);
   const [budgetSource, setBudgetSource] = useState<'POCKET' | 'FUND'>('POCKET');
   const [selectedLotIds, setSelectedLotIds] = useState<string[]>([]);
+  // Why he sells — he picks one of the buttons before a sale can be confirmed
+  // (approved 2026-10-31). Text only: it never moves money.
+  const [sellReasonCode, setSellReasonCode] = useState<SellReasonCode | null>(null);
+  const [sellReasonNote, setSellReasonNote] = useState<string>('');
   const [statement, setStatement] = useState<any>(null);
   const [statementSection, setStatementSection] = useState<'POCKET' | 'INVEST'>('POCKET');
   const [statementShowAll, setStatementShowAll] = useState<boolean>(false);
@@ -120,7 +125,7 @@ export default function App() {
     const interval = setInterval(() => {
       if (selectedProfile && Date.now() - lastActivityRef.current > INACTIVITY_TIMEOUT) {
         handleLogout();
-        alert('Session closed due to 15 minutes of inactivity. Please sign back in with your PIN!');
+        alert(t('common.sessionClosed'));
       }
     }, 10000); // Check every 10s
 
@@ -231,6 +236,36 @@ export default function App() {
   const money = (usd: number) => `₪${toLocal(usd).toFixed(2)}`;
   const accountCash = (which: 'POCKET' | 'FUND') =>
     which === 'POCKET' ? (accounts?.pocket?.balanceLocal ?? summary?.pocketLocal ?? 0) : (accounts?.invest?.cashLocal ?? summary?.investFundLocal ?? 0);
+  // "למה מכרתי — ומה קרה מאז": every closed lot grouped by the reason he picked,
+  // with what the price did since (sold price vs today's price) — the lesson, measured.
+  const closedWithReason = (() => {
+    type Group = { code: string; label: string; count: number; realized: number; soldFor: number; worthNow: number };
+    const groups = new Map<string, Group>();
+    for (const lot of lots.filter((l) => l.status === 'CLOSED' && l.sellReasonCode)) {
+      const g: Group =
+        groups.get(lot.sellReasonCode) ||
+        { code: lot.sellReasonCode, label: sellReasonLabelHe(lot.sellReasonCode, lot.sellReasonNote) || '', count: 0, realized: 0, soldFor: 0, worthNow: 0 };
+      const shares = lot.originalShares || 0;
+      g.count += 1;
+      g.realized += lot.realizedPnlLocal || 0;
+      g.soldFor += shares * (lot.soldPriceUsd || 0);
+      g.worthNow += shares * (lot.currentPriceUsd || 0);
+      groups.set(lot.sellReasonCode, g);
+    }
+    return [...groups.values()]
+      .map((g) => {
+        const soldFor = toLocal(g.soldFor);
+        const worthNow = toLocal(g.worthNow);
+        return {
+          ...g,
+          realized: Number(g.realized.toFixed(2)),
+          soldFor,
+          worthNow,
+          diff: Number((worthNow - soldFor).toFixed(2)),
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+  })();
   const kindEmoji = (kind: string) =>
     (({
       OPENING: '🏁',
@@ -334,7 +369,7 @@ export default function App() {
           setErrorText(data.error);
         }
       } catch (e: any) {
-        setErrorText('Could not contact the trade execution ledger.');
+        setErrorText(t('trade.cannotReachLedger'));
       }
       return false;
     }
@@ -351,6 +386,9 @@ export default function App() {
             type: 'SELL',
             // These are the exact lots he picked — money returns to where each came from.
             lotIds: selectedLotIds,
+            // Why he sold — required, and text only (never money).
+            sellReasonCode,
+            ...(sellReasonNote ? { sellReasonNote } : {}),
           }),
         });
         const data = await res.json();
@@ -358,6 +396,9 @@ export default function App() {
           setSuccessText(data.message);
           setErrorText(null);
           setShowPinPad(null);
+          setSelectedLotIds([]);
+          setSellReasonCode(null);
+          setSellReasonNote('');
           // Refresh catalog & child dashboard
           fetchStocks();
           fetchActiveProfileData(selectedProfile.name);
@@ -366,7 +407,7 @@ export default function App() {
           setErrorText(data.error);
         }
       } catch (e: any) {
-        setErrorText('Could not contact the trade execution ledger.');
+        setErrorText(t('trade.cannotReachLedger'));
       }
       return false;
     }
@@ -389,7 +430,7 @@ export default function App() {
   const handleCreateProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProfileName || !newProfilePin || newProfilePin.length !== 4) {
-      alert('Profile name and a 4-digit security PIN are required!');
+      alert(t('createProfile.required'));
       return;
     }
 
@@ -414,17 +455,17 @@ export default function App() {
         setNewProfilePin('');
         setShowCreateProfile(false);
         fetchProfiles();
-        alert(`Profile for ${data.profile.name} created successfully! Log in with PIN ${newProfilePin}.`);
+        alert(`${data.profile.name}: ${t('createProfile.createdPrefix')} ${newProfilePin}.`);
       } else {
-        alert(`Failed to create profile: ${data.error}`);
+        alert(`${t('createProfile.failedPrefix')} ${data.error}`);
       }
     } catch (err) {
-      alert('Could not connect to the creation server.');
+      alert(t('createProfile.noServer'));
     }
   };
 
   const handleDeleteProfile = async (name: string) => {
-    if (!confirm(`Are you absolutely sure you want to delete ${name}'s profile? All ledger histories on this simulation will be removed!`)) return;
+    if (!confirm(`${name} — ${t('settings.deleteConfirm')}`)) return;
     try {
       const res = await fetch(`/api/profiles/${encodeURIComponent(name)}`, {
         method: 'DELETE',
@@ -433,10 +474,10 @@ export default function App() {
       if (data.success) {
         fetchProfiles();
         handleLogout();
-        alert('Profile deleted.');
+        alert(t('settings.profileDeleted'));
       }
     } catch (e) {
-      alert('Could not complete deletion.');
+      alert(t('settings.deleteFailed'));
     }
   };
 
@@ -776,11 +817,11 @@ export default function App() {
                         const res = await fetch('/api/cron/snapshots', { method: 'POST' });
                         const d = await res.json();
                         if (d.success) {
-                          alert('Nightly ledger snapshot recorded successfully!');
+                          alert(t('dashboard.snapshotDone'));
                           fetchActiveProfileData(selectedProfile.name);
                         }
                       } catch (e) {
-                        alert('Could not record snapshot.');
+                        alert(t('dashboard.snapshotFailed'));
                       }
                     }}
                     className="p-2.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl text-indigo-700 shadow-sm transition-all flex items-center gap-1.5 text-xs font-bold cursor-pointer"
@@ -996,8 +1037,8 @@ export default function App() {
                         {holdings.length === 0 ? (
                           <div className="text-center py-10 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                             <Briefcase className="w-12 h-12 text-slate-300 mx-auto mb-2 animate-pulse" />
-                            <p className="text-sm font-bold text-slate-500">You don't own any stocks yet!</p>
-                            <p className="text-xs font-semibold text-slate-400 mt-1">Head over to the Invest Market to make your first trade.</p>
+                            <p className="text-sm font-bold text-slate-500">{t('dashboard.noStocksYet')}</p>
+                            <p className="text-xs font-semibold text-slate-400 mt-1">{t('dashboard.noStocksHint')}</p>
                           </div>
                         ) : (
                           <div className="overflow-x-auto">
@@ -1429,9 +1470,50 @@ export default function App() {
                                   </>
                                 )}
 
+                                {/* Why he sells — required before the sale can be
+                                    confirmed (approved 2026-10-31). Text only: it never
+                                    moves money. Shown only when he owns lots of this stock. */}
+                                {openLotsOfTicker(selectedStock.ticker).length > 0 && (
+                                <div className="space-y-2 pt-1">
+                                  <span className="text-[10px] font-bold uppercase text-slate-500">
+                                    {t('stocks.sellReasonTitle')}
+                                  </span>
+                                  <div className="space-y-1.5">
+                                    {SELL_REASONS.map((r) => {
+                                      const picked = sellReasonCode === r.code;
+                                      return (
+                                        <button
+                                          key={r.code}
+                                          onClick={() => setSellReasonCode(r.code)}
+                                          className={`w-full text-left p-2.5 rounded-2xl border text-[11px] font-extrabold transition-all cursor-pointer ${
+                                            picked
+                                              ? 'border-indigo-500 bg-indigo-50/60 text-indigo-800'
+                                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                                          }`}
+                                        >
+                                          {picked ? '☑' : '☐'} {r.emoji} {r.labelHe}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {sellReasonCode === 'OTHER' && (
+                                    <input
+                                      value={sellReasonNote}
+                                      onChange={(e) => setSellReasonNote(e.target.value)}
+                                      maxLength={SELL_REASON_NOTE_MAX}
+                                      placeholder={t('stocks.sellReasonNotePlaceholder')}
+                                      className="w-full p-2.5 rounded-2xl border border-slate-200 text-[11px] font-bold text-slate-700"
+                                    />
+                                  )}
+                                  {!sellReasonCode && (
+                                    <p className="text-[10px] font-bold text-rose-500">{t('stocks.sellReasonRequired')}</p>
+                                  )}
+                                </div>
+                                )}
+
                                 <button
                                   onClick={() => setShowPinPad('trade_sell')}
-                                  disabled={selectedLots.length === 0}
+                                  disabled={selectedLots.length === 0 || !sellReasonCode}
                                   className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
                                 >
                                   {t('stocks.confirmSell')}
@@ -1525,7 +1607,7 @@ export default function App() {
                       {history.length === 0 ? (
                         <div className="text-center py-12 text-slate-400">
                           <History className="w-12 h-12 text-slate-300 mx-auto mb-2 animate-pulse" />
-                          <p className="text-sm font-bold">No ledger events recorded on this system.</p>
+                          <p className="text-sm font-bold">{t('ledger.noLedgerEvents')}</p>
                         </div>
                       ) : (
                         <div className="space-y-4">
@@ -1558,6 +1640,11 @@ export default function App() {
                                     <p className="text-xs text-slate-500 font-semibold mt-1">
                                       {t('ledger.price')} ${tx.priceUsd.toFixed(2)} USD | {t('ledger.fxConversion')} {selectedProfile.currencyMode === 'PARITY' ? '₪1=1' : `₪1=$${tx.fxRate.toFixed(2)}`}
                                     </p>
+                                    {!isBuy && tx.sellReasonCode && (
+                                      <p className="text-[10px] font-bold text-indigo-500 mt-1.5">
+                                        סיבה: {sellReasonLabelHe(tx.sellReasonCode, tx.sellReasonNote)}
+                                      </p>
+                                    )}
                                     <p className="text-[10px] text-slate-400 font-bold mt-1.5 uppercase">
                                       {t('ledger.fireflyHash')} <span className="font-mono text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{tx.fireflyTransactionId}</span>
                                     </p>
@@ -1712,6 +1799,11 @@ export default function App() {
                                     {m.noteHe && (
                                       <p className="text-[10px] font-bold text-amber-600 mt-0.5 leading-snug">{m.noteHe}</p>
                                     )}
+                                    {m.reasonHe && (
+                                      <p className="text-[10px] font-bold text-indigo-500 mt-0.5 leading-snug">
+                                        סיבה: {m.reasonHe}
+                                      </p>
+                                    )}
                                   </div>
                                   <div className="text-right shrink-0">
                                     <p
@@ -1819,19 +1911,53 @@ export default function App() {
                                     return (
                                       <div
                                         key={lot.id}
-                                        className="flex justify-between items-center p-3 rounded-2xl bg-slate-50/60 border border-slate-100 text-[11px] font-bold text-slate-600"
+                                        className="p-3 rounded-2xl bg-slate-50/60 border border-slate-100 text-[11px] font-bold text-slate-600"
                                       >
-                                        <span>
-                                          💵 {lot.ticker} · נמכר {lot.closedAt ? fmtDate(lot.closedAt) : '—'}
-                                        </span>
-                                        <span className={isProfit ? 'text-emerald-600' : 'text-rose-600'}>
-                                          {isProfit ? '+' : ''}
-                                          ₪{Number(lot.realizedPnlLocal || 0).toFixed(2)}
-                                        </span>
+                                        <div className="flex justify-between items-center gap-2">
+                                          <span>
+                                            💵 {lot.ticker} · נמכר {lot.closedAt ? fmtDate(lot.closedAt) : '—'}
+                                          </span>
+                                          <span className={isProfit ? 'text-emerald-600' : 'text-rose-600'}>
+                                            {isProfit ? '+' : ''}
+                                            ₪{Number(lot.realizedPnlLocal || 0).toFixed(2)}
+                                          </span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-indigo-500 mt-1">
+                                          סיבה: {sellReasonLabelHe(lot.sellReasonCode, lot.sellReasonNote) || '—'}
+                                        </p>
                                       </div>
                                     );
                                   })}
                               </div>
+                            </div>
+                          )}
+
+                          {closedWithReason.length > 0 && (
+                            <div className="mt-6 bg-indigo-50/40 border border-indigo-100 rounded-2xl p-4">
+                              <p className="text-[11px] font-extrabold uppercase text-indigo-500 mb-3">
+                                למה מכרתי — ומה קרה מאז
+                              </p>
+                              <div className="space-y-3">
+                                {closedWithReason.map((g) => (
+                                  <div key={g.code} className="text-[11px] font-bold text-slate-600">
+                                    <p className="text-slate-800">{g.label}</p>
+                                    <p>
+                                      {g.count} {g.count === 1 ? 'מכירה' : 'מכירות'} · רווח/הפסד שמומש:{' '}
+                                      <span className={g.realized >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                                        {g.realized >= 0 ? '+' : '−'}₪{Math.abs(g.realized).toFixed(2)}
+                                      </span>
+                                    </p>
+                                    <p className="text-slate-500">
+                                      אילו לא מכרת: השווי שלהן היום ₪{g.worthNow.toFixed(2)} מול ₪{g.soldFor.toFixed(2)}{' '}
+                                      שקיבלת ({g.diff >= 0 ? 'המחיר עלה ב-' : 'המחיר ירד ב-'}₪{Math.abs(g.diff).toFixed(2)})
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                              <p className="text-[10px] font-bold text-slate-400 mt-3 leading-relaxed">
+                                זה לא שיפוט — זה מה שקרה בפועל מאז שמכרת. הסיבה נשמרת בכל מכירה, כך שאפשר
+                                לחזור לכאן בעוד חודש ולראות.
+                              </p>
                             </div>
                           )}
                         </div>
@@ -1926,16 +2052,16 @@ export default function App() {
                       <div className="pt-4 space-y-4">
                         <button
                           onClick={() => {
-                            const newPin = prompt('Enter a new 4-digit security PIN:');
+                            const newPin = prompt(t('settings.changePinPrompt'));
                             if (!newPin || newPin.length !== 4 || isNaN(Number(newPin))) {
-                              alert('Invalid PIN! Pin must be exactly 4 digits.');
+                              alert(t('settings.invalidPin'));
                               return;
                             }
                             fetch(`/api/profiles/${selectedProfile.name}`, {
                               method: 'PUT',
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ pin: newPin }),
-                            }).then(() => alert('Security PIN changed successfully!'));
+                            }).then(() => alert(t('settings.pinChanged')));
                           }}
                           className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-sm active:scale-95 transition-all cursor-pointer uppercase tracking-wider"
                         >

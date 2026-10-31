@@ -115,8 +115,17 @@ async function main() {
       label: 'SELL a lot that does not exist',
       proof: { ok: false, error: 'no open lot carries that id' },
       run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: sellTicker, type: 'SELL',
-        lotIds: ['lot-does-not-exist'] }),
+        lotIds: ['lot-does-not-exist'], sellReasonCode: 'AFRAID_OF_DROP' }),
       expect: /כבר לא זמין|אין לך מניות/,
+    },
+    {
+      // Approved 2026-10-31: a sale carries why he sold — one of the five buttons.
+      // Text only, but the request must not go through without it.
+      label: 'SELL without saying why (the reason is required)',
+      proof: { ok: false, error: 'a SELL must carry one of the five reason buttons' },
+      run: (p) => post('/api/trade', { profileName: PROFILE, pin: p, ticker: sellTicker, type: 'SELL',
+        lotIds: [] }),
+      expect: /צריך לבחור למה אתה מוכר/,
     },
     {
       label: 'trade with a wrong PIN',

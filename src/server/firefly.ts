@@ -196,8 +196,10 @@ export const LedgerService = {
     fundAccountId: string;
     pocketAccountId: string;
     investmentAccountId: string;
+    /** Why he sold — appended to the sale journal's description (text only). */
+    reasonHe?: string | null;
   }): Promise<{ principalTransferId: string; adjustmentTransferId: string }> {
-    const { sale, kidName, acquiredAt, fundAccountId, pocketAccountId, investmentAccountId } = params;
+    const { sale, kidName, acquiredAt, fundAccountId, pocketAccountId, investmentAccountId, reasonHe } = params;
     const clearingAccountId = process.env.MARKET_CLEARING_ACCOUNT_ID
       || process.env.BANK_OF_DAD_ACCOUNT_ID   // legacy name, kept so a running .env keeps working
       || '25';
@@ -206,11 +208,14 @@ export const LedgerService = {
     const boughtOn = String(acquiredAt || '').slice(0, 10);
 
     // Leg 1: the principal (or the current value, when the sale lost money)
-    // leaves the investments account and returns to where it came from.
+    // leaves the investments account and returns to where it came from. The kid's
+    // own reason for selling rides along in the description — the ledger keeps the
+    // "why" of every sale, not just the "how much".
     const principalTransferId = await this.createTransfer(
       sale.principalReturnLocal,
       `מכירת ${sale.ticker}: ₪${sale.principalReturnLocal.toFixed(2)} חזרו `
-        + `${isPocket ? 'לכיס' : 'לקרן ההשקעות'} (מגרש מ-${boughtOn}) — ${kidName}`,
+        + `${isPocket ? 'לכיס' : 'לקרן ההשקעות'} (מגרש מ-${boughtOn}) — ${kidName}`
+        + (reasonHe ? ` · סיבה: ${reasonHe}` : ''),
       investmentAccountId,
       backTo
     );
