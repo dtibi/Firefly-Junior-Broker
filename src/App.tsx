@@ -15,8 +15,6 @@ import {
   ArrowLeft,
   History,
   Sparkles,
-  Plus,
-  Minus,
   LogOut,
   DollarSign,
   Activity,
@@ -38,6 +36,7 @@ import { SELL_REASONS, SELL_REASON_NOTE_MAX, sellReasonLabelHe } from './sell-re
 import PinPad from './components/PinPad.tsx';
 import AiCoachModal from './components/AiCoachModal.tsx';
 import PerformanceChart from './components/PerformanceChart.tsx';
+import TradePanel from './components/TradePanel.tsx';
 import { useTranslation } from './i18n/useTranslation';
 
 export default function App() {
@@ -79,6 +78,13 @@ export default function App() {
 
   // UI Sub-modals & loaders
   const [activeTab, setActiveTab] = useState<'dashboard' | 'stocks' | 'account' | 'ledger' | 'settings'>('dashboard');
+  // Trading from a row of his own portfolio table (approved 2026-11-20): the row
+  // opens the SAME trade cards in a popup, scoped to that ticker. It is a
+  // shortcut, not a bypass — the PIN, the sale reason and every money rule are
+  // untouched.
+  const [tradeRowTicker, setTradeRowTicker] = useState<string | null>(null);
+  const [tradeRowIntent, setTradeRowIntent] = useState<'BUY' | 'SELL'>('BUY');
+  const [myStocksOnly, setMyStocksOnly] = useState<boolean>(false);
   const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | null>(null);
   const [targetProfileToLogin, setTargetProfileToLogin] = useState<Profile | null>(null);
   const [showAiModal, setShowAiModal] = useState<string | null>(null); // stock ticker
@@ -220,18 +226,8 @@ export default function App() {
     };
   }, [selectedStock?.ticker]);
 
-  // The lots the kid can sell: only the ones HE bought, only the open ones.
-  const openLotsOfTicker = (ticker?: string) =>
-    lots.filter((l) => l.status === 'OPEN' && (!ticker || l.ticker === ticker));
-  const selectedLots = lots.filter((l) => selectedLotIds.includes(l.id));
-  const selectedLotsTotals = selectedLots.reduce(
-    (acc, l) => ({
-      principal: acc.principal + (l.principalLocal || 0),
-      value: acc.value + (l.currentValueUsd || 0),
-      gain: acc.gain + (l.gainLossUsd || 0),
-    }),
-    { principal: 0, value: 0, gain: 0 }
-  );
+  // (the lots he can sell are computed inside <TradePanel>, which both the
+  // market tab and the portfolio popup render)
   const toLocal = (usd: number) => (selectedProfile?.currencyMode === 'PARITY' ? usd : usd / (summary?.fxRate || 1));
   const money = (usd: number) => `₪${toLocal(usd).toFixed(2)}`;
   const accountCash = (which: 'POCKET' | 'FUND') =>
@@ -293,9 +289,12 @@ export default function App() {
   const fmtDateTime = (value: string | number | Date) => new Date(value).toLocaleString(localeTag);
 
   // Stock directory filtering: category chips + free-text search
+  const ownedTickers = new Set(holdings.map((h) => h.ticker));
   const filteredStocks = stocks.filter((s) => {
     const q = stockSearch.trim().toLowerCase();
-    const matchesCategory = !activeCategory || s.category === activeCategory;
+    const matchesCategory = myStocksOnly
+      ? ownedTickers.has(s.ticker)
+      : !activeCategory || s.category === activeCategory;
     const matchesSearch =
       !q ||
       s.ticker.toLowerCase().includes(q) ||
@@ -303,6 +302,30 @@ export default function App() {
       (s.heName || '').includes(q);
     return matchesCategory && matchesSearch;
   });
+
+  // A row of the portfolio table: hand the kid the same trade cards, already
+  // scoped to the ticker he tapped.
+  const openTradeForTicker = (ticker: string, intent: 'BUY' | 'SELL') => {
+    const quote = stocks.find((s) => s.ticker === ticker);
+    const holding = holdings.find((h) => h.ticker === ticker);
+    if (!quote && !holding) return;
+    setSelectedStock(
+      quote ||
+        ({
+          ticker,
+          name: holding?.ticker,
+          heName: holding?.ticker,
+          logo: holding?.logo,
+          category: '',
+          priceUsd: holding?.currentPriceUsd ?? 0,
+          changePercent: 0,
+        } as StockQuote)
+    );
+    setTradeRowIntent(intent);
+    setTradeRowTicker(ticker);
+    setErrorText(null);
+    setSuccessText(null);
+  };
 
   const categoryLabel = (id: string) => {
     const cat = stockCategories.find((c) => c.id === id);
@@ -1050,6 +1073,7 @@ export default function App() {
                                   <th className="py-3 px-2">{t('dashboard.averageCost')}</th>
                                   <th className="py-3 px-2">{t('dashboard.currentValue')}</th>
                                   <th className="py-3 px-2">{t('dashboard.gainLoss')}</th>
+                                  <th className="py-3 px-2 text-right">{t('dashboard.actions')}</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1089,6 +1113,22 @@ export default function App() {
                                           {isProfit ? '+' : ''}₪{(h.gainLossUsd / (selectedProfile.currencyMode === 'PARITY' ? 1.0 : summary.fxRate)).toFixed(2)}
                                         </p>
                                       </td>
+                                      <td className="py-4 px-2">
+                                        <div className="flex items-center justify-end gap-2">
+                                          <button
+                                            onClick={() => openTradeForTicker(h.ticker, 'BUY')}
+                                            className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[10px] shadow-sm active:scale-95 cursor-pointer transition-all uppercase tracking-wide"
+                                          >
+                                            {t('dashboard.buyMore')}
+                                          </button>
+                                          <button
+                                            onClick={() => openTradeForTicker(h.ticker, 'SELL')}
+                                            className="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] shadow-sm active:scale-95 cursor-pointer transition-all uppercase tracking-wide"
+                                          >
+                                            {t('dashboard.sellThis')}
+                                          </button>
+                                        </div>
+                                      </td>
                                     </tr>
                                   );
                                 })}
@@ -1117,7 +1157,7 @@ export default function App() {
                         <p className="text-xs text-slate-500 font-semibold mt-0.5">{t('stocks.marketplaceDesc')}</p>
                       </div>
 
-                      {/* Search + category chips (the directory now has 44 tickers) */}
+                      {/* Search + category chips (the directory now has 62 tickers) */}
                       <div className="space-y-3">
                         <input
                           type="text"
@@ -1128,19 +1168,40 @@ export default function App() {
                         />
                         <div className="flex flex-wrap gap-1.5">
                           <button
-                            onClick={() => setActiveCategory(null)}
+                            onClick={() => {
+                              setActiveCategory(null);
+                              setMyStocksOnly(false);
+                            }}
                             className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
-                              activeCategory === null
+                              activeCategory === null && !myStocksOnly
                                 ? 'bg-indigo-600 text-white border-indigo-600'
                                 : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
                             }`}
                           >
                             {t('stocks.allCategories')} ({stocks.length})
                           </button>
+                          {/* The catalogue is long now, so the stocks he already
+                              owns get their own filter. */}
+                          <button
+                            onClick={() => {
+                              setMyStocksOnly(!myStocksOnly);
+                              setActiveCategory(null);
+                            }}
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                              myStocksOnly
+                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            ⭐ {t('stocks.myStocks')} ({ownedTickers.size})
+                          </button>
                           {stockCategories.map((cat) => (
                             <button
                               key={cat.id}
-                              onClick={() => setActiveCategory(cat.id)}
+                              onClick={() => {
+                                setActiveCategory(cat.id);
+                                setMyStocksOnly(false);
+                              }}
                               className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
                                 activeCategory === cat.id
                                   ? 'bg-indigo-600 text-white border-indigo-600'
@@ -1281,247 +1342,27 @@ export default function App() {
                             />
                           </div>
 
-                          {/* BUY & SELL TRADE CENTER */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-100/80">
-                            
-                            {/* Buying Card */}
-                            <div className="bg-slate-50/50 border border-slate-200/80 rounded-[24px] p-6 space-y-4 shadow-sm">
-                              <h4 className="font-extrabold text-emerald-700 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                <Plus className="w-4.5 h-4.5" />
-                                <span>{t('stocks.investBuy')}</span>
-                              </h4>
-                              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                {t('stocks.investBuyHint')}
-                              </p>
-
-                              <div className="space-y-4">
-                                {/* Which account pays? Money never moves between them. */}
-                                <div className="grid grid-cols-2 gap-2">
-                                  {[
-                                    { key: 'POCKET', emoji: '🍬', label: 'מהכיס', available: accountCash('POCKET') },
-                                    { key: 'FUND', emoji: '📈', label: 'מהקרן', available: accountCash('FUND') },
-                                  ].map((opt) => (
-                                    <button
-                                      key={opt.key}
-                                      onClick={() => setBudgetSource(opt.key as 'POCKET' | 'FUND')}
-                                      className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
-                                        budgetSource === opt.key
-                                          ? 'border-emerald-500 bg-emerald-50/70 shadow-sm'
-                                          : 'border-slate-200 bg-white hover:border-slate-300'
-                                      }`}
-                                    >
-                                      <div className="text-[11px] font-extrabold text-slate-800">
-                                        {opt.emoji} {opt.label}
-                                      </div>
-                                      <div className="text-[10px] font-bold text-slate-500 mt-0.5">
-                                        יש ₪{opt.available.toFixed(2)}
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-
-                                <div className="relative">
-                                  <span className="absolute left-3.5 top-3 font-extrabold text-slate-400 text-sm">₪</span>
-                                  <input
-                                    type="number"
-                                    min={10}
-                                    value={tradeAmountLocal}
-                                    onChange={(e) => setTradeAmountLocal(e.target.value)}
-                                    className="w-full pl-14 pr-4 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 outline-none font-bold bg-white focus:bg-white transition-all shadow-inner"
-                                  />
-                                </div>
-
-                                <div className="flex gap-2">
-                                  {['10', '20', '50', '100'].map((preset) => (
-                                    <button
-                                      key={preset}
-                                      onClick={() => setTradeAmountLocal(preset)}
-                                      className={`flex-1 py-2 px-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                                        tradeAmountLocal === preset
-                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-100'
-                                          : 'bg-white hover:bg-slate-100 text-slate-600 border-slate-200'
-                                      }`}
-                                    >
-                                      ₪{preset}
-                                    </button>
-                                  ))}
-                                </div>
-
-                                <button
-                                  onClick={() => setShowPinPad('trade_buy')}
-                                  disabled={parseFloat(tradeAmountLocal || '0') > accountCash(budgetSource)}
-                                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
-                                >
-                                  {t('stocks.confirmBuy')}
-                                </button>
-                                <p className="text-[10px] font-bold text-slate-400 leading-relaxed">
-                                  {budgetSource === 'POCKET'
-                                    ? 'קונה מהכיס — הכסף יוצא מחשבון הכיס.'
-                                    : 'קונה מהקרן — הכסף יוצא מחשבון ההשקעות.'}
-                                  {parseFloat(tradeAmountLocal || '0') > accountCash(budgetSource) && (
-                                    <span className="text-rose-500"> אין מספיק כסף בחשבון הזה.</span>
-                                  )}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Selling Card */}
-                            <div className="bg-slate-50/50 border border-slate-200/80 rounded-[24px] p-6 space-y-4 shadow-sm">
-                              <h4 className="font-extrabold text-rose-600 text-xs uppercase tracking-wider flex items-center gap-1.5">
-                                <Minus className="w-4.5 h-4.5" />
-                                <span>{t('stocks.liquidateSell')}</span>
-                              </h4>
-                              <p className="text-xs text-slate-500 font-semibold leading-relaxed">
-                                {t('stocks.liquidateSellHint')}
-                              </p>
-
-                              <div className="space-y-4">
-                                {/* He picks the exact lots HE bought — each shows its own result. */}
-                                {openLotsOfTicker(selectedStock.ticker).length === 0 ? (
-                                  <p className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200/60 rounded-2xl p-3">
-                                    אין לך עדיין עסקאות של {selectedStock.ticker} למכירה.
-                                  </p>
-                                ) : (
-                                  <>
-                                    <div className="flex justify-between items-center">
-                                      <span className="text-[10px] font-bold uppercase text-slate-500">
-                                        בחר את העסקאות למכירה
-                                      </span>
-                                      <button
-                                        onClick={() => {
-                                          const ids = openLotsOfTicker(selectedStock.ticker).map((l) => l.id);
-                                          setSelectedLotIds(selectedLotIds.length === ids.length ? [] : ids);
-                                        }}
-                                        className="text-[10px] font-extrabold text-indigo-600 hover:text-indigo-800 cursor-pointer"
-                                      >
-                                        {selectedLotIds.length === openLotsOfTicker(selectedStock.ticker).length
-                                          ? 'נקה בחירה'
-                                          : 'בחר הכול'}
-                                      </button>
-                                    </div>
-
-                                    <div className="space-y-2 max-h-56 overflow-y-auto">
-                                      {openLotsOfTicker(selectedStock.ticker).map((lot) => {
-                                        const picked = selectedLotIds.includes(lot.id);
-                                        const isProfit = (lot.gainLossUsd || 0) >= 0;
-                                        return (
-                                          <button
-                                            key={lot.id}
-                                            onClick={() =>
-                                              setSelectedLotIds(
-                                                picked
-                                                  ? selectedLotIds.filter((id) => id !== lot.id)
-                                                  : [...selectedLotIds, lot.id]
-                                              )
-                                            }
-                                            className={`w-full text-left p-3 rounded-2xl border transition-all cursor-pointer ${
-                                              picked
-                                                ? 'border-indigo-500 bg-indigo-50/60'
-                                                : 'border-slate-200 bg-white hover:border-slate-300'
-                                            }`}
-                                          >
-                                            <div className="flex justify-between items-center gap-2">
-                                              <span className="text-[11px] font-extrabold text-slate-800">
-                                                {picked ? '☑' : '☐'} ₪{lot.principalLocal.toFixed(2)} ·{' '}
-                                                {fmtDate(lot.acquiredAt)}
-                                                <span className="text-[9px] font-bold text-slate-400">
-                                                  {' '}
-                                                  {lot.fundingSource === 'POCKET' ? 'מהכיס' : 'מהקרן'}
-                                                </span>
-                                              </span>
-                                              <span
-                                                className={`text-[11px] font-extrabold ${
-                                                  isProfit ? 'text-emerald-600' : 'text-rose-600'
-                                                }`}
-                                              >
-                                                {isProfit ? '+' : ''}
-                                                {money(lot.gainLossUsd || 0)} ({lot.gainLossPercent}%)
-                                              </span>
-                                            </div>
-                                            <div className="text-[9px] font-bold text-slate-400 mt-0.5">
-                                              {lot.shares.toFixed(4)} מניות · שווי עכשיו {money(lot.currentValueUsd)}
-                                            </div>
-                                          </button>
-                                        );
-                                      })}
-                                    </div>
-
-                                    {selectedLots.length > 0 && (
-                                      <div className="bg-white border border-slate-200 rounded-2xl p-3 text-[11px] font-bold text-slate-600 space-y-0.5">
-                                        <div>
-                                          נבחרו {selectedLots.length} עסקאות · שילמת ₪
-                                          {selectedLotsTotals.principal.toFixed(2)}
-                                        </div>
-                                        <div>תקבל עכשיו {money(selectedLotsTotals.value)}</div>
-                                        <div
-                                          className={
-                                            selectedLotsTotals.gain >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                                          }
-                                        >
-                                          {selectedLotsTotals.gain >= 0 ? 'רווח' : 'הפסד'}{' '}
-                                          {money(Math.abs(selectedLotsTotals.gain))}{' '}
-                                          {selectedLots.length === 1
-                                            ? `במכירת ${selectedLots[0].ticker}`
-                                            : `במכירת ${selectedLots.length} עסקאות`}{' '}
-                                          — {selectedLotsTotals.gain >= 0 ? 'מהשוק' : 'נשאר בשוק'}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </>
-                                )}
-
-                                {/* Why he sells — required before the sale can be
-                                    confirmed (approved 2026-10-31). Text only: it never
-                                    moves money. Shown only when he owns lots of this stock. */}
-                                {openLotsOfTicker(selectedStock.ticker).length > 0 && (
-                                <div className="space-y-2 pt-1">
-                                  <span className="text-[10px] font-bold uppercase text-slate-500">
-                                    {t('stocks.sellReasonTitle')}
-                                  </span>
-                                  <div className="space-y-1.5">
-                                    {SELL_REASONS.map((r) => {
-                                      const picked = sellReasonCode === r.code;
-                                      return (
-                                        <button
-                                          key={r.code}
-                                          onClick={() => setSellReasonCode(r.code)}
-                                          className={`w-full text-left p-2.5 rounded-2xl border text-[11px] font-extrabold transition-all cursor-pointer ${
-                                            picked
-                                              ? 'border-indigo-500 bg-indigo-50/60 text-indigo-800'
-                                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
-                                          }`}
-                                        >
-                                          {picked ? '☑' : '☐'} {r.emoji} {r.labelHe}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  {sellReasonCode === 'OTHER' && (
-                                    <input
-                                      value={sellReasonNote}
-                                      onChange={(e) => setSellReasonNote(e.target.value)}
-                                      maxLength={SELL_REASON_NOTE_MAX}
-                                      placeholder={t('stocks.sellReasonNotePlaceholder')}
-                                      className="w-full p-2.5 rounded-2xl border border-slate-200 text-[11px] font-bold text-slate-700"
-                                    />
-                                  )}
-                                  {!sellReasonCode && (
-                                    <p className="text-[10px] font-bold text-rose-500">{t('stocks.sellReasonRequired')}</p>
-                                  )}
-                                </div>
-                                )}
-
-                                <button
-                                  onClick={() => setShowPinPad('trade_sell')}
-                                  disabled={selectedLots.length === 0 || !sellReasonCode}
-                                  className="w-full py-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-rose-50 active:scale-95 cursor-pointer transition-all uppercase tracking-wider"
-                                >
-                                  {t('stocks.confirmSell')}
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
+                          {/* BUY & SELL TRADE CENTER — one component, shown here and
+                              in the popup the kid opens from his own portfolio table */}
+                          <TradePanel
+                            stock={selectedStock}
+                            lots={lots}
+                            cash={{ POCKET: accountCash('POCKET'), FUND: accountCash('FUND') }}
+                            toLocal={toLocal}
+                            localeTag={localeTag}
+                            tradeAmountLocal={tradeAmountLocal}
+                            setTradeAmountLocal={setTradeAmountLocal}
+                            budgetSource={budgetSource}
+                            setBudgetSource={setBudgetSource}
+                            selectedLotIds={selectedLotIds}
+                            setSelectedLotIds={setSelectedLotIds}
+                            sellReasonCode={sellReasonCode}
+                            setSellReasonCode={setSellReasonCode}
+                            sellReasonNote={sellReasonNote}
+                            setSellReasonNote={setSellReasonNote}
+                            onRequestBuy={() => setShowPinPad('trade_buy')}
+                            onRequestSell={() => setShowPinPad('trade_sell')}
+                          />
                           {/* General Error/Success feedback area */}
                           <div className="h-6 mt-2">
                             <AnimatePresence>
@@ -2087,6 +1928,77 @@ export default function App() {
 
         </AnimatePresence>
       </main>
+
+      {/* Trade popup opened from a row of his own portfolio table */}
+      <AnimatePresence>
+        {tradeRowTicker && selectedProfile && selectedStock && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm flex items-start md:items-center justify-center p-3 md:p-6 overflow-y-auto"
+            onClick={() => setTradeRowTicker(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.96, y: 12 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.96, y: 12 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[32px] border border-slate-200/80 shadow-2xl w-full max-w-3xl p-6 md:p-8 my-4 space-y-5"
+            >
+              <div className="flex justify-between items-start border-b border-slate-100/80 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-2xl shadow-sm border border-slate-200/60">
+                    {selectedStock.logo || '⭐'}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-extrabold text-slate-900">
+                      {locale === 'he' && selectedStock.heName ? selectedStock.heName : selectedStock.name}
+                    </h3>
+                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      {selectedStock.ticker} · {t('dashboard.tradePopupHint')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setTradeRowTicker(null)}
+                  className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 cursor-pointer transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <TradePanel
+                stock={selectedStock}
+                lots={lots}
+                cash={{ POCKET: accountCash('POCKET'), FUND: accountCash('FUND') }}
+                toLocal={toLocal}
+                localeTag={localeTag}
+                tradeAmountLocal={tradeAmountLocal}
+                setTradeAmountLocal={setTradeAmountLocal}
+                budgetSource={budgetSource}
+                setBudgetSource={setBudgetSource}
+                selectedLotIds={selectedLotIds}
+                setSelectedLotIds={setSelectedLotIds}
+                sellReasonCode={sellReasonCode}
+                setSellReasonCode={setSellReasonCode}
+                sellReasonNote={sellReasonNote}
+                setSellReasonNote={setSellReasonNote}
+                onRequestBuy={() => setShowPinPad('trade_buy')}
+                onRequestSell={() => setShowPinPad('trade_sell')}
+                highlight={tradeRowIntent}
+              />
+
+              <div className="h-5">
+                <AnimatePresence>
+                  {errorText && <p className="text-xs font-bold text-red-500 text-center">⚠️ {errorText}</p>}
+                  {successText && <p className="text-xs font-bold text-emerald-500 text-center">✅ {successText}</p>}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating PIN Keypad security lock Overlay */}
       <AnimatePresence>

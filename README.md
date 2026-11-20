@@ -36,47 +36,52 @@ about saving, patience, ownership, and losing money — which happens, and is th
 ## What the kid sees
 
 ### The vault — the whole picture at a glance
-![Dashboard](assets/screenshots/01-dashboard.png?v=2)
+![Dashboard](assets/screenshots/01-dashboard.png?v=3)
 
 Two accounts, one honest profit figure, and a chart with two lines: what he owns (blue) and what
-was actually put in from outside (dashed). The gap between them is the only real profit.
+was actually put in from outside (dashed). The gap between them is the only real profit. Under it,
+his portfolio table: every stock he owns, and next to each one the two things he can do about it —
+**buy more** or **sell** — without leaving the page.
 
-### The market — 44 companies and baskets a child has heard of
-![Market](assets/screenshots/02-market.png?v=2)
+### The market — 62 companies and baskets a child has heard of
+![Market](assets/screenshots/02-market.png?v=3)
 
 Google, Minecraft's Microsoft, Roblox, Nintendo, McDonald's, Tesla — plus baskets that hold 500
 companies at once, so "don't put all your eggs in one basket" is something he can do, not just hear.
-Live prices, in shekels, updated from the market.
+Live prices, in shekels, updated from the market. Sixty-odd names is a long shelf for a child, so a
+⭐ filter shows only the stocks he already owns.
 
 ### Every stock explains itself
-![Stock detail](assets/screenshots/03-stock.png?v=2)
+![Stock detail](assets/screenshots/03-stock.png?v=3)
 
 What the company actually does (in Hebrew, with a playground analogy), a real 30-day price chart,
 and an AI coach that answers a kid's questions in a kid's language.
 
 ### Buy from the pocket or the fund — then sell the exact purchases you own
-![Trading](assets/screenshots/04-trade.png?v=2)
+![Trading](assets/screenshots/04-trade.png?v=3)
 
 Buying asks which money pays: pocket money (🍬) or the investment fund (📈). Selling shows every
 purchase he made, one by one, each with its own profit — and he chooses which ones to sell. The
 result is named for what it is: *רווח ₪4.00 במכירת SPY — מהשוק* — "₪4.00 profit on the SPY sale,
-paid by the market" — never after the grown-up who settles it.
+paid by the market" — never after the grown-up who settles it. This is the same panel he gets when
+he taps **buy more** or **sell** on a row of his own portfolio table (the screenshot above is that
+popup), and it ends the same way: no PIN, no trade.
 
 ### The pocket account — a bank statement he can read
-![Pocket statement](assets/screenshots/05-account-pocket.png?v=2)
+![Pocket statement](assets/screenshots/05-account-pocket.png?v=3)
 
 Allowance in, spending out, a running balance after every movement, and a monthly summary. This is
 where pocket money finally becomes a visible thing instead of an abstract number.
 
 ### The investing account — including the part grown-ups get wrong
-![Investing statement](assets/screenshots/06-account-invest.png?v=2)
+![Investing statement](assets/screenshots/06-account-invest.png?v=3)
 
 A purchase swaps cash for stock, so the account's value doesn't change — the app says so out loud
 instead of printing "+0.00". Profit and loss are named after the stock that was sold
 (*"רווח במכירת TSLA"*), never after the parent who settles it.
 
 ### Every purchase is its own lot, with its own story
-![Lots](assets/screenshots/07-lots.png?v=2)
+![Lots](assets/screenshots/07-lots.png?v=3)
 
 ₪14 of Intel in August and ₪32 in September are two separate purchases with two separate results —
 so the kid sees that investing well is a series of decisions, not one lucky guess.
@@ -196,7 +201,7 @@ Enter the four account ids when you create the profile in the app.
 
 ## The stock shelf
 
-44 tickers — 38 companies a child knows plus 6 baskets, in 9 categories. Every one carries a
+62 tickers — 54 companies a child knows plus 8 baskets, in 9 categories. Every one carries a
 Hebrew name, an explanation and a playground analogy, shown in the *"What is this company?"* box.
 
 ### 🧺 Baskets — סלים
@@ -209,6 +214,8 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | SCHD | Dividend Companies Basket | סל שמחלק כסף | סל של חברות שכל רבעון מחלקות לבעלים חלק מהרווח (דיבידנד) — כמו דמי כיס מהחברות. |
 | GLD | Gold Basket | סל הזהב | קונים חתיכת זהב אמיתי — בלי כספת ובלי שודדים. |
 | VNQ | Real Estate Basket | סל הבתים | סל של חברות שמחזיקות בניינים ומשכירות אותם; הכסף מהשכירות מגיע לבעלים. |
+| VTI | Whole US Market Basket | סל כל השוק האמריקאי | סל אחד שמחזיק אלפי חברות אמריקאיות — גדולות, בינוניות וקטנות — במניה אחת. |
+| SMH | The Chips Basket | סל השבבים | סל שמחזיק את יצרניות השבבים הגדולות בעולם — אנווידיה, TSMC, ASML וחברותיהן. |
 
 ### 📱 Tech & Internet — טכנולוגיה ואינטרנט
 
@@ -224,6 +231,9 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | UBER | Uber | אובר | מזמינים נסיעה או אוכל באפליקציה — בלי מוניות ובלי טלפונים. |
 | ABNB | Airbnb | איירבי-אנד-בי | אנשים משכירים את הבית או החדר שלהם לתיירים דרך האפליקציה. |
 | DASH | DoorDash | דורדאש | שליחים שמביאים אוכל מהמסעדה עד הבית; החברה לוקחת חלק מכל הזמנה. |
+| ORCL | Oracle | אורקל | אורקל שומרת את מסדי הנתונים הענקיים שבהם בנקים, חנויות ומשחקים מאחסנים את המידע שלהם. |
+| PYPL | PayPal | פייפאל | פייפאל מעבירה כסף בין אנשים לחנויות באינטרנט — בלי מזומן ובלי מעטפה. |
+| SNAP | Snapchat | סנאפצ'ט | האפליקציה ששולחת תמונות שנעלמות אחרי כמה שניות, וגם משקפיים שמצלמים את מה שרואים. |
 
 ### 💻 Chips — שבבים ומחשבים
 
@@ -235,6 +245,8 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | TSM | TSMC | TSMC | בית החרושת הגדול בעולם שמייצר שבבים בשביל אפל ואנבידיה — כולם צריכים אותה. |
 | QCOM | Qualcomm | קוואלקום | קוואלקום מייצרת שבבי רדיו ומעבדים לטלפונים ולטאבלטים — בלעדיהם אין קליטה ואין אינטרנט. |
 | ASML | ASML | ASML | ASML בונה מכונות ענק שמכינות שבבים בדיוק מטורף — המדויקות בעולם. |
+| AVGO | Broadcom | ברודקום | ברודקום מייצרת שבבים וחלקי Wi-Fi שמחברים טלפונים, מחשבים והרבה מהאינטרנט. |
+| ARM | Arm | ARM (שבבים לנייד) | ארם מתכננת את השבבים הקטנים והחסכניים שבתוך כמעט כל טלפון וטאבלט — ומקבלת תשלום על כל תוכנית שלה. |
 
 ### 🎮 Gaming & Fun — גיימינג ובידור
 
@@ -245,6 +257,7 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | SONY | Sony | סוני | הבית של PlayStation, של סרטי ספיידרמן ושל אוזניות. ענקית בידור מיפן. |
 | EA | Electronic Arts | אלקטרוניק ארטס | מפתחת משחקי ספורט וכדורגל שמיליונים משחקים בהם. |
 | DIS | Disney | דיסני | דיסני עושה קסמים עם מיקי מאוס, מלחמת הכוכבים, גיבורי מארוול ופארקי שעשועים ענקיים. |
+| TTWO | Take-Two (GTA) | טייק-טו (GTA) | האולפן מאחורי GTA, NBA 2K ומשחקי עולם פתוח ענקיים. |
 
 ### 🍔 Food & Restaurants — אוכל ומסעדות
 
@@ -257,6 +270,9 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | DPZ | Domino's Pizza | דומינו'ס פיצה | רשת הפיצה הגדולה — מכינה ומביאה פיצות עד הבית. |
 | CMG | Chipotle | צ'יפוטלה | מסעדות מקסיקניות מהירות — בוריטו שנעשה מול העיניים. |
 | MDLZ | Mondelez | מונדליז | החברה של אוראו, מילקה וטובלרון. |
+| YUM | KFC & Pizza Hut | KFC ופיצה האט | חברה אחת שמחזיקה את KFC, פיצה האט וטאקו בל — מסעדות בכמעט כל מדינה. |
+| HSY | Hershey | הרשי'ס | חברת השוקולד מאחורי חטיפי הרשי'ס והקיסים — שוקולד שכולם טעמו. |
+| KDP | Dr Pepper & Keurig | ד"ר פפר וקיוריג | ד"ר פפר, 7Up ומכונת קיוריג שמכינה בבית שוקו וקפה בלחיצה. |
 
 ### 🧸 Toys — צעצועים
 
@@ -271,6 +287,7 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 |---|---|---|---|
 | COST | Costco | קוסטקו | מחסנים ענקיים עם מחירים זולים; אנשים משלמים מנוי כדי לקנות שם. |
 | WMT | Walmart | וולמארט | רשת הקניות הגדולה בעולם — אוכל, בגדים וכלים במקום אחד. |
+| TGT | Target | טארגט | החנות האמריקאית הגדולה עם העיגול האדום — בגדים, צעצועים וחטיפים במקום אחד. |
 
 ### 👟 Brands & Cards — מותגים וכרטיסים
 
@@ -278,6 +295,10 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 |---|---|---|---|
 | NKE | Nike | נייקי | חברת הנעליים והספורט הגדולה — נעליים וחולצות של כוכבי ספורט. |
 | V | Visa | ויזה | הכרטיס שמאפשר לשלם בכל העולם, ולוקחת אחוז קטן מכל קנייה — מיליוני קניות ביום. |
+| MA | Mastercard | מאסטרקארד | רשת הכרטיסים שמאפשרת לשלם בכל העולם וגובה אחוז קטן מכל קנייה. |
+| LULU | Lululemon | לולולמון | חברת בגדי הספורט המפורסמת בבגדים שנמתחים — יוגה, ריצה וכושר. |
+| JNJ | Johnson & Johnson | ג'ונסון אנד ג'ונסון | החברה שמאחורי פלסטרי בנדייד וטיילונול — חצי מארון התרופות בבית. |
+| BRK.B | Berkshire Hathaway | ברקשייר האת'וויי | החברה של וורן באפט: היא מחזיקה את דיירי קווין, סוללות דוראסל, ג'ייקו ועוד המון מניות. |
 
 ### 🚗 Machines, Planes & Space — מכונות, מטוסים וחלל
 
@@ -287,6 +308,8 @@ Hebrew name, an explanation and a playground analogy, shown in the *"What is thi
 | CAT | Caterpillar | קטרפילר | קטרפילר בונה טרקטורים, מחפרונים ומכונות ענק לכבישים ולמכרות. |
 | BA | Boeing | בואינג | בואינג בונה מטוסי נוסעים ענקיים וגם חלקים שטסים לחלל. |
 | RKLB | Rocket Lab | רוקט לאב | רוקט לאב משגרת לוויינים קטנים לחלל במחיר זול — 'מונית לחלל'. |
+| F | Ford | פורד | מהיצרניות הוותיקות בעולם — המציאה את פס הייצור ועדיין בונה טנדרים. |
+| TM | Toyota | טויוטה | יצרנית הרכב הגדולה בעולם, מפורסמת בפריוס ובמכוניות שנוסעות לנצח. |
 
 A **basket** (ETF) holds many companies at once — buying one basket is like buying a slice of a
 whole shelf instead of a single box.
@@ -322,7 +345,7 @@ npm run verify:guardrails  # live checks: bad trades must be refused (server mus
 `npm test` pins the rules that must never regress: allowances are never counted as profit,
 opening balances are counted exactly once, `profit = realized + unrealized`, lots are never merged,
 a pocket-funded lot always returns to the pocket, the three-legged sale, the minimum order and the
-0.01-share floor, all 44 stocks carry Hebrew copy, and the statement labels every split once in
+0.01-share floor, all 62 stocks carry Hebrew copy, and the statement labels every split once in
 Hebrew. `npm run verify:guardrails` proves a *running* server still refuses bad money requests —
 and refuses to send any request the rules consider legal, so a test can never execute a real trade.
 

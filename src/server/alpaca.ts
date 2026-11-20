@@ -95,6 +95,28 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "index",
     logo: "🏢",
   },
+  VTI: {
+    ticker: "VTI",
+    name: "Whole US Market Basket",
+    heName: "סל כל השוק האמריקאי",
+    description: "One basket that owns thousands of American companies — big, medium and small — in a single share.",
+    heDescription: "סל אחד שמחזיק אלפי חברות אמריקאיות — גדולות, בינוניות וקטנות — במניה אחת.",
+    childAnalogy: "כמו לקנות כרטיס אחד לכל הלונה-פארק במקום לרכבל אחד.",
+    sector: "סלים",
+    category: "index",
+    logo: "🇺🇸",
+  },
+  SMH: {
+    ticker: "SMH",
+    name: "The Chips Basket",
+    heName: "סל השבבים",
+    description: "A basket that owns the biggest chip makers in the world — NVIDIA, TSMC, ASML and their friends.",
+    heDescription: "סל שמחזיק את יצרניות השבבים הגדולות בעולם — אנווידיה, TSMC, ASML וחברותיהן.",
+    childAnalogy: "במקום לקנות שבב אחד — קונים את כל מפעל השבבים.",
+    sector: "סלים",
+    category: "index",
+    logo: "🔌",
+  },
   GOOGL: {
     ticker: "GOOGL",
     name: "Google & YouTube",
@@ -205,6 +227,39 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "tech",
     logo: "🛵",
   },
+  ORCL: {
+    ticker: "ORCL",
+    name: "Oracle",
+    heName: "אורקל",
+    description: "Oracle keeps the giant databases where banks, shops and games store their information.",
+    heDescription: "אורקל שומרת את מסדי הנתונים הענקיים שבהם בנקים, חנויות ומשחקים מאחסנים את המידע שלהם.",
+    childAnalogy: "כמו ארון ענק ומסודר שכל העולם שומר בו את המסמכים שלו.",
+    sector: "טכנולוגיה ואינטרנט",
+    category: "tech",
+    logo: "🗄️",
+  },
+  PYPL: {
+    ticker: "PYPL",
+    name: "PayPal",
+    heName: "פייפאל",
+    description: "PayPal moves money between people and shops on the internet — no cash, no envelope.",
+    heDescription: "פייפאל מעבירה כסף בין אנשים לחנויות באינטרנט — בלי מזומן ובלי מעטפה.",
+    childAnalogy: "כמו לשלוח כסף לחבר בלחיצה במקום לתת לו שטר.",
+    sector: "טכנולוגיה ואינטרנט",
+    category: "tech",
+    logo: "💸",
+  },
+  SNAP: {
+    ticker: "SNAP",
+    name: "Snapchat",
+    heName: "סנאפצ'ט",
+    description: "The camera app that sends photos which disappear, and the glasses that film what you see.",
+    heDescription: "האפליקציה ששולחת תמונות שנעלמות אחרי כמה שניות, וגם משקפיים שמצלמים את מה שרואים.",
+    childAnalogy: "הודעה עם טיימר: קוראים אותה — והיא נעלמת כמו קסם.",
+    sector: "טכנולוגיה ואינטרנט",
+    category: "tech",
+    logo: "👻",
+  },
   NVDA: {
     ticker: "NVDA",
     name: "NVIDIA",
@@ -271,6 +326,28 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "chips",
     logo: "🔬",
   },
+  AVGO: {
+    ticker: "AVGO",
+    name: "Broadcom",
+    heName: "ברודקום",
+    description: "Broadcom builds the chips and the Wi-Fi parts that connect phones, computers and much of the internet.",
+    heDescription: "ברודקום מייצרת שבבים וחלקי Wi-Fi שמחברים טלפונים, מחשבים והרבה מהאינטרנט.",
+    childAnalogy: "הצנרת שמעבירה את האינטרנט לכל הבית.",
+    sector: "שבבים ומחשבים",
+    category: "chips",
+    logo: "📡",
+  },
+  ARM: {
+    ticker: "ARM",
+    name: "Arm",
+    heName: "ARM (שבבים לנייד)",
+    description: "Arm designs the tiny low-power chips inside almost every phone and tablet — and is paid for each design it licenses.",
+    heDescription: "ארם מתכננת את השבבים הקטנים והחסכניים שבתוך כמעט כל טלפון וטאבלט — ומקבלת תשלום על כל תוכנית שלה.",
+    childAnalogy: "המתכננת שמציירת את השרטוטים — ומפעלים אחרים בונים לפיה.",
+    sector: "שבבים ומחשבים",
+    category: "chips",
+    logo: "🔋",
+  },
   RBLX: {
     ticker: "RBLX",
     name: "Roblox",
@@ -325,6 +402,17 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     sector: "גיימינג ובידור",
     category: "gaming",
     logo: "🏰",
+  },
+  TTWO: {
+    ticker: "TTWO",
+    name: "Take-Two (GTA)",
+    heName: "טייק-טו (GTA)",
+    description: "The studio behind Grand Theft Auto, NBA 2K and big open-world games.",
+    heDescription: "האולפן מאחורי GTA, NBA 2K ומשחקי עולם פתוח ענקיים.",
+    childAnalogy: "כמו להיות הבעלים של האולפן שבונה את המשחק הגדול.",
+    sector: "גיימינג ובידור",
+    category: "gaming",
+    logo: "🌆",
   },
   MCD: {
     ticker: "MCD",
@@ -403,6 +491,39 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "food",
     logo: "🍪",
   },
+  YUM: {
+    ticker: "YUM",
+    name: "KFC & Pizza Hut",
+    heName: "KFC ופיצה האט",
+    description: "One company that owns KFC, Pizza Hut and Taco Bell — restaurants in nearly every country.",
+    heDescription: "חברה אחת שמחזיקה את KFC, פיצה האט וטאקו בל — מסעדות בכמעט כל מדינה.",
+    childAnalogy: "מסעדה אחת עם שלוש קופות: עוף, פיצה וטאקו.",
+    sector: "אוכל ומסעדות",
+    category: "food",
+    logo: "🍗",
+  },
+  HSY: {
+    ticker: "HSY",
+    name: "Hershey",
+    heName: "הרשי'ס",
+    description: "The chocolate company behind Hershey's bars and Kisses — chocolate everyone has tasted.",
+    heDescription: "חברת השוקולד מאחורי חטיפי הרשי'ס והקיסים — שוקולד שכולם טעמו.",
+    childAnalogy: "השוקולד שהגיע לכיתה לפני כולם.",
+    sector: "אוכל ומסעדות",
+    category: "food",
+    logo: "🍫",
+  },
+  KDP: {
+    ticker: "KDP",
+    name: "Dr Pepper & Keurig",
+    heName: "ד\"ר פפר וקיוריג",
+    description: "Dr Pepper, 7Up and the Keurig machine that makes hot chocolate and coffee at home in one click.",
+    heDescription: "ד\"ר פפר, 7Up ומכונת קיוריג שמכינה בבית שוקו וקפה בלחיצה.",
+    childAnalogy: "מכונת שתייה אישית שעומדת במטבח שלך.",
+    sector: "אוכל ומסעדות",
+    category: "food",
+    logo: "🥤",
+  },
   HAS: {
     ticker: "HAS",
     name: "Hasbro",
@@ -447,6 +568,17 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "shopping",
     logo: "🏬",
   },
+  TGT: {
+    ticker: "TGT",
+    name: "Target",
+    heName: "טארגט",
+    description: "The big American shop with the round red logo — clothes, toys and snacks under one roof.",
+    heDescription: "החנות האמריקאית הגדולה עם העיגול האדום — בגדים, צעצועים וחטיפים במקום אחד.",
+    childAnalogy: "חנות אחת שיש בה כל מה שצריך לבית.",
+    sector: "קניות",
+    category: "shopping",
+    logo: "🎯",
+  },
   NKE: {
     ticker: "NKE",
     name: "Nike",
@@ -468,6 +600,50 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     sector: "מותגים וכרטיסים",
     category: "brands",
     logo: "💳",
+  },
+  MA: {
+    ticker: "MA",
+    name: "Mastercard",
+    heName: "מאסטרקארד",
+    description: "The card network that lets people pay all over the world, taking a tiny slice of every purchase.",
+    heDescription: "רשת הכרטיסים שמאפשרת לשלם בכל העולם וגובה אחוז קטן מכל קנייה.",
+    childAnalogy: "כרטיס אחד שפותח דלתות בכל חנות בעולם.",
+    sector: "מותגים וכרטיסים",
+    category: "brands",
+    logo: "💳",
+  },
+  LULU: {
+    ticker: "LULU",
+    name: "Lululemon",
+    heName: "לולולמון",
+    description: "The sportswear company famous for clothes that stretch — yoga, running and the gym.",
+    heDescription: "חברת בגדי הספורט המפורסמת בבגדים שנמתחים — יוגה, ריצה וכושר.",
+    childAnalogy: "בגדים שנמתחים איתך בכל תנועה.",
+    sector: "מותגים וכרטיסים",
+    category: "brands",
+    logo: "🧘",
+  },
+  JNJ: {
+    ticker: "JNJ",
+    name: "Johnson & Johnson",
+    heName: "ג'ונסון אנד ג'ונסון",
+    description: "The company behind Band-Aid plasters and Tylenol — half of the medicine cabinet at home.",
+    heDescription: "החברה שמאחורי פלסטרי בנדייד וטיילונול — חצי מארון התרופות בבית.",
+    childAnalogy: "כמו להיות שותף במי שמכין את הפלסטר על הברך.",
+    sector: "מותגים וכרטיסים",
+    category: "brands",
+    logo: "🩹",
+  },
+  "BRK.B": {
+    ticker: "BRK.B",
+    name: "Berkshire Hathaway",
+    heName: "ברקשייר האת'וויי",
+    description: "Warren Buffett's company: it owns Dairy Queen, Duracell batteries, GEICO and a pile of shares.",
+    heDescription: "החברה של וורן באפט: היא מחזיקה את דיירי קווין, סוללות דוראסל, ג'ייקו ועוד המון מניות.",
+    childAnalogy: "קופסה ענקית שבתוכה עוד עשרות חברות מוכרות.",
+    sector: "מותגים וכרטיסים",
+    category: "brands",
+    logo: "🎩",
   },
   TSLA: {
     ticker: "TSLA",
@@ -513,6 +689,28 @@ export const KIDS_STOCKS: Record<string, StockInfo> = {
     category: "wheels",
     logo: "🚀",
   },
+  F: {
+    ticker: "F",
+    name: "Ford",
+    heName: "פורד",
+    description: "One of the oldest car makers — it invented the moving assembly line and still builds pickups.",
+    heDescription: "מהיצרניות הוותיקות בעולם — המציאה את פס הייצור ועדיין בונה טנדרים.",
+    childAnalogy: "המכונית הראשונה שממש כולם יכלו לקנות.",
+    sector: "מכונות, מטוסים וחלל",
+    category: "wheels",
+    logo: "🛻",
+  },
+  TM: {
+    ticker: "TM",
+    name: "Toyota",
+    heName: "טויוטה",
+    description: "The biggest car maker in the world, famous for the Prius and for cars that last forever.",
+    heDescription: "יצרנית הרכב הגדולה בעולם, מפורסמת בפריוס ובמכוניות שנוסעות לנצח.",
+    childAnalogy: "המכונית היפנית ששורדת כל דרך.",
+    sector: "מכונות, מטוסים וחלל",
+    category: "wheels",
+    logo: "🚙",
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -526,6 +724,8 @@ export const BASE_PRICES: Record<string, number> = {
   SCHD: 33.03,
   GLD: 379.36,
   VNQ: 90.65,
+  VTI: 352.51,
+  SMH: 444.27,
   GOOGL: 342.39,
   MSFT: 512.1,
   AAPL: 340.13,
@@ -536,17 +736,23 @@ export const BASE_PRICES: Record<string, number> = {
   UBER: 68.55,
   ABNB: 157.66,
   DASH: 180.96,
+  ORCL: 110.56,
+  PYPL: 56.38,
+  SNAP: 5.11,
   NVDA: 230.53,
   INTC: 116.11,
   AMD: 606.52,
   TSM: 453.66,
   QCOM: 190.19,
   ASML: 1779.48,
+  AVGO: 348.84,
+  ARM: 175.07,
   RBLX: 42.95,
   NTDOY: 12.55,
   SONY: 23.36,
   EA: 209.86,
   DIS: 105.28,
+  TTWO: 208.77,
   MCD: 234.31,
   KO: 87.06,
   PEP: 128.0,
@@ -554,21 +760,37 @@ export const BASE_PRICES: Record<string, number> = {
   DPZ: 291.57,
   CMG: 32.67,
   MDLZ: 60.0,
+  YUM: 159.34,
+  HSY: 174.1,
+  KDP: 34.39,
   HAS: 89.58,
   MAT: 13.38,
   COST: 923.13,
   WMT: 108.64,
+  TGT: 167.46,
   NKE: 36.38,
   V: 368.95,
+  MA: 626.85,
+  LULU: 105.57,
+  JNJ: 267.23,
+  "BRK.B": 572.21,
   TSLA: 359.15,
   CAT: 822.27,
   BA: 188.88,
   RKLB: 73.04,
+  F: 11.23,
+  TM: 211.42,
 };
 
 // Tickers that Alpaca does not serve (OTC / pink sheets) — these fall back to
 // Yahoo Finance for their quote.
 export const ALPACA_UNSUPPORTED_TICKERS = new Set(['NTDOY']);
+
+// Yahoo writes some symbols with a dash where the exchange uses a dot
+// (Berkshire's BRK.B is BRK-B on Yahoo), so the Yahoo quote/history path asks
+// for the right symbol instead of 404-ing into the simulator.
+const YAHOO_SYMBOLS: Record<string, string> = { 'BRK.B': 'BRK-B' };
+const yahooSymbol = (ticker: string): string => YAHOO_SYMBOLS[ticker] || ticker;
 
 // Seed-based pseudo-random generator for stable daily fluctuations in the simulator
 function getDayVolatility(ticker: string, offsetDays: number = 0): number {
@@ -614,7 +836,7 @@ export function simulatedQuote(ticker: string): StockQuote {
 
 // ---------------------------------------------------------------------------
 // Quote cache — one batched Alpaca call for the whole directory, served from
-// memory for a few minutes. Keeps the UI fast with 44 tickers.
+// memory for a few minutes. Keeps the UI fast with the whole catalogue.
 // ---------------------------------------------------------------------------
 const QUOTE_TTL_MS = 5 * 60 * 1000;
 let quoteCache: { at: number; quotes: Record<string, StockQuote> } | null = null;
@@ -660,7 +882,7 @@ async function fetchAlpacaSnapshots(tickers: string[]): Promise<Record<string, a
 async function fetchYahooQuote(ticker: string): Promise<Partial<StockQuote> | null> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5d&interval=1d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol(ticker)}?range=5d&interval=1d`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     if (!res.ok) return null;
@@ -881,7 +1103,7 @@ export const MarketService = {
     const yahooRange = range === '1D' ? '1d' : range === '1W' ? '5d' : range === '1Y' ? '1y' : '1mo';
     try {
       const res = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${yahooRange}&interval=1d`,
+        `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol(ticker)}?range=${yahooRange}&interval=1d`,
         { headers: { 'User-Agent': 'Mozilla/5.0' } }
       );
       if (res.ok) {

@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * The stock catalogue + market-data mapping. These tests keep the 44-ticker
+ * The stock catalogue + market-data mapping. These tests keep the 62-ticker
  * directory honest (every stock must explain itself to a child, in Hebrew) and
  * pin down the parsing of Alpaca/Yahoo payloads so a provider change cannot
  * silently blank the prices.
@@ -27,7 +27,7 @@ const tickers = Object.keys(KIDS_STOCKS);
 
 describe('the kids stock directory', () => {
   test('has the expected size and no duplicates', () => {
-    assert.equal(tickers.length, 44);
+    assert.equal(tickers.length, 62);
     assert.equal(new Set(tickers).size, tickers.length);
   });
 

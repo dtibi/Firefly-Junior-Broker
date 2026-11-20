@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""מייצר את src/server/alpaca.ts עם 44 טיקרים, קריאה מרובת-סימולים אחת ו-cache."""
+"""מייצר את src/server/alpaca.ts עם 62 טיקרים, קריאה מרובת-סימולים אחת ו-cache."""
 
 CATEGORIES = [
     ("index",    "🧺", "סלים",                "Baskets"),
@@ -41,6 +41,14 @@ STOCKS = [
      "A basket of companies that own buildings and rent them out to people and shops.",
      "סל של חברות שמחזיקות בניינים ומשכירות אותם; הכסף מהשכירות מגיע לבעלים.",
      "כמו להיות שותף בבעלים של קניון שלם."),
+    ("VTI", "Whole US Market Basket", "סל כל השוק האמריקאי", "index", "🇺🇸", 352.51,
+     "One basket that owns thousands of American companies — big, medium and small — in a single share.",
+     "סל אחד שמחזיק אלפי חברות אמריקאיות — גדולות, בינוניות וקטנות — במניה אחת.",
+     "כמו לקנות כרטיס אחד לכל הלונה-פארק במקום לרכבל אחד."),
+    ("SMH", "The Chips Basket", "סל השבבים", "index", "🔌", 444.27,
+     "A basket that owns the biggest chip makers in the world — NVIDIA, TSMC, ASML and their friends.",
+     "סל שמחזיק את יצרניות השבבים הגדולות בעולם — אנווידיה, TSMC, ASML וחברותיהן.",
+     "במקום לקנות שבב אחד — קונים את כל מפעל השבבים."),
     # ---------- טכנולוגיה ----------
     ("GOOGL", "Google & YouTube", "גוגל ויוטיוב", "tech", "📺", 342.39,
      "Google runs the search bar that knows everything, plus YouTube where you watch your favourite creators.",
@@ -82,6 +90,18 @@ STOCKS = [
      "Couriers bring food from restaurants to your door; the company takes a slice of each order.",
      "שליחים שמביאים אוכל מהמסעדה עד הבית; החברה לוקחת חלק מכל הזמנה.",
      "כמו שליח מהיר שמביא פיצה חמה עד הדלת."),
+    ("ORCL", "Oracle", "אורקל", "tech", "🗄️", 110.56,
+     "Oracle keeps the giant databases where banks, shops and games store their information.",
+     "אורקל שומרת את מסדי הנתונים הענקיים שבהם בנקים, חנויות ומשחקים מאחסנים את המידע שלהם.",
+     "כמו ארון ענק ומסודר שכל העולם שומר בו את המסמכים שלו."),
+    ("PYPL", "PayPal", "פייפאל", "tech", "💸", 56.38,
+     "PayPal moves money between people and shops on the internet — no cash, no envelope.",
+     "פייפאל מעבירה כסף בין אנשים לחנויות באינטרנט — בלי מזומן ובלי מעטפה.",
+     "כמו לשלוח כסף לחבר בלחיצה במקום לתת לו שטר."),
+    ("SNAP", "Snapchat", "סנאפצ'ט", "tech", "👻", 5.11,
+     "The camera app that sends photos which disappear, and the glasses that film what you see.",
+     "האפליקציה ששולחת תמונות שנעלמות אחרי כמה שניות, וגם משקפיים שמצלמים את מה שרואים.",
+     "הודעה עם טיימר: קוראים אותה — והיא נעלמת כמו קסם."),
     # ---------- שבבים ----------
     ("NVDA", "NVIDIA", "אנווידיה", "chips", "🤖", 230.53,
      "NVIDIA builds the powerful chips (GPUs) that make 3D games look real and power AI.",
@@ -91,11 +111,11 @@ STOCKS = [
      "Intel makes the tiny brain chips (processors) inside almost every computer and laptop.",
      "אינטל מייצרת את שבבי המוח הקטנים (מעבדים) שבתוך כמעט כל מחשב ונייד.",
      "אם מחשבים היו אנשים, השבבים של אינטל היו המוח שבתוך הראש שלהם."),
-    ("AMD", "AMD", "AMD", "chips", "🔥", 606.52,
+    ("AMD", "AMD", "AMD (מעבדים)", "chips", "🔥", 606.52,
      "AMD makes fast processors and graphics chips for computers and game consoles.",
      "AMD מייצרת מעבדים ושבבים גרפיים חזקים למחשבים ולמשחקים — המתחרה של אנבידיה ואינטל.",
      "כמו קבוצת מרוץ נוספת של שבבים — לפעמים מנצחת."),
-    ("TSM", "TSMC", "TSMC", "chips", "🏭", 453.66,
+    ("TSM", "TSMC", "TSMC (יצרנית שבבים)", "chips", "🏭", 453.66,
      "The biggest chip factory in the world — it manufactures chips for Apple, NVIDIA and many more.",
      "בית החרושת הגדול בעולם שמייצר שבבים בשביל אפל ואנבידיה — כולם צריכים אותה.",
      "כמו האופה שמכין את הלחמניות לכל המסעדות בעיר."),
@@ -103,10 +123,18 @@ STOCKS = [
      "Qualcomm makes the radio chips and processors inside smartphones and tablets.",
      "קוואלקום מייצרת שבבי רדיו ומעבדים לטלפונים ולטאבלטים — בלעדיהם אין קליטה ואין אינטרנט.",
      "כמו האנטנה הקטנה שמביאה את הקליטה לטלפון."),
-    ("ASML", "ASML", "ASML", "chips", "🔬", 1779.48,
+    ("ASML", "ASML", "ASML (מכונות לשבבים)", "chips", "🔬", 1779.48,
      "ASML builds the most precise machines in the world — they print the tiny circuits on chips.",
      "ASML בונה מכונות ענק שמכינות שבבים בדיוק מטורף — המדויקות בעולם.",
      "כמו מכונת קסמים שמציירת מיליון קווים דקים על גרגר אורז."),
+    ("AVGO", "Broadcom", "ברודקום", "chips", "📡", 348.84,
+     "Broadcom builds the chips and the Wi-Fi parts that connect phones, computers and much of the internet.",
+     "ברודקום מייצרת שבבים וחלקי Wi-Fi שמחברים טלפונים, מחשבים והרבה מהאינטרנט.",
+     "הצנרת שמעבירה את האינטרנט לכל הבית."),
+    ("ARM", "Arm", "ARM (שבבים לנייד)", "chips", "🔋", 175.07,
+     "Arm designs the tiny low-power chips inside almost every phone and tablet — and is paid for each design it licenses.",
+     "ארם מתכננת את השבבים הקטנים והחסכניים שבתוך כמעט כל טלפון וטאבלט — ומקבלת תשלום על כל תוכנית שלה.",
+     "המתכננת שמציירת את השרטוטים — ומפעלים אחרים בונים לפיה."),
     # ---------- גיימינג ובידור ----------
     ("RBLX", "Roblox", "רובלוקס", "gaming", "🎮", 42.95,
      "Roblox is a huge online world where you build your own games and play them with friends.",
@@ -128,6 +156,10 @@ STOCKS = [
      "Disney makes magic with Mickey Mouse, Star Wars, Marvel heroes and giant theme parks.",
      "דיסני עושה קסמים עם מיקי מאוס, מלחמת הכוכבים, גיבורי מארוול ופארקי שעשועים ענקיים.",
      "לקנות דיסני זה לקנות חתיכה מהטירות, הסרטים והצעצועים שאתה אוהב."),
+    ("TTWO", "Take-Two (GTA)", "טייק-טו (GTA)", "gaming", "🌆", 208.77,
+     "The studio behind Grand Theft Auto, NBA 2K and big open-world games.",
+     "האולפן מאחורי GTA, NBA 2K ומשחקי עולם פתוח ענקיים.",
+     "כמו להיות הבעלים של האולפן שבונה את המשחק הגדול."),
     # ---------- אוכל ----------
     ("MCD", "McDonald's", "מקדונלד'ס", "food", "🍟", 234.31,
      "The most famous burger chain in the world, with tens of thousands of restaurants.",
@@ -157,6 +189,18 @@ STOCKS = [
      "The company behind Oreo cookies, Milka and Toblerone chocolate.",
      "החברה של אוראו, מילקה וטובלרון.",
      "'אוראו טבול בחלב' — זה הם."),
+    ("YUM", "KFC & Pizza Hut", "KFC ופיצה האט", "food", "🍗", 159.34,
+     "One company that owns KFC, Pizza Hut and Taco Bell — restaurants in nearly every country.",
+     "חברה אחת שמחזיקה את KFC, פיצה האט וטאקו בל — מסעדות בכמעט כל מדינה.",
+     "מסעדה אחת עם שלוש קופות: עוף, פיצה וטאקו."),
+    ("HSY", "Hershey", "הרשי\'ס", "food", "🍫", 174.10,
+     "The chocolate company behind Hershey's bars and Kisses — chocolate everyone has tasted.",
+     "חברת השוקולד מאחורי חטיפי הרשי\'ס והקיסים — שוקולד שכולם טעמו.",
+     "השוקולד שהגיע לכיתה לפני כולם."),
+    ("KDP", "Dr Pepper & Keurig", "ד\"ר פפר וקיוריג", "food", "🥤", 34.39,
+     "Dr Pepper, 7Up and the Keurig machine that makes hot chocolate and coffee at home in one click.",
+     "ד\"ר פפר, 7Up ומכונת קיוריג שמכינה בבית שוקו וקפה בלחיצה.",
+     "מכונת שתייה אישית שעומדת במטבח שלך."),
     # ---------- צעצועים ----------
     ("HAS", "Hasbro", "הסברו", "toys", "🧸", 89.58,
      "The company behind Transformers, Play-Doh, Monopoly and Nerf.",
@@ -175,6 +219,10 @@ STOCKS = [
      "The biggest shopping chain in the world — food, clothes and tools under one roof.",
      "רשת הקניות הגדולה בעולם — אוכל, בגדים וכלים במקום אחד.",
      "הסופר הכי גדול באמריקה."),
+    ("TGT", "Target", "טארגט", "shopping", "🎯", 167.46,
+     "The big American shop with the round red logo — clothes, toys and snacks under one roof.",
+     "החנות האמריקאית הגדולה עם העיגול האדום — בגדים, צעצועים וחטיפים במקום אחד.",
+     "חנות אחת שיש בה כל מה שצריך לבית."),
     # ---------- מותגים וכרטיסים ----------
     ("NKE", "Nike", "נייקי", "brands", "👟", 36.38,
      "The biggest sport shoes and clothes brand, worn by famous athletes.",
@@ -184,6 +232,22 @@ STOCKS = [
      "The card network that lets people pay anywhere in the world, taking a tiny slice of every purchase.",
      "הכרטיס שמאפשר לשלם בכל העולם, ולוקחת אחוז קטן מכל קנייה — מיליוני קניות ביום.",
      "כביש אגרה קטן שכל שקל בעולם עובר דרכו."),
+    ("MA", "Mastercard", "מאסטרקארד", "brands", "💳", 626.85,
+     "The card network that lets people pay all over the world, taking a tiny slice of every purchase.",
+     "רשת הכרטיסים שמאפשרת לשלם בכל העולם וגובה אחוז קטן מכל קנייה.",
+     "כרטיס אחד שפותח דלתות בכל חנות בעולם."),
+    ("LULU", "Lululemon", "לולולמון", "brands", "🧘", 105.57,
+     "The sportswear company famous for clothes that stretch — yoga, running and the gym.",
+     "חברת בגדי הספורט המפורסמת בבגדים שנמתחים — יוגה, ריצה וכושר.",
+     "בגדים שנמתחים איתך בכל תנועה."),
+    ("JNJ", "Johnson & Johnson", "ג'ונסון אנד ג'ונסון", "brands", "🩹", 267.23,
+     "The company behind Band-Aid plasters and Tylenol — half of the medicine cabinet at home.",
+     "החברה שמאחורי פלסטרי בנדייד וטיילונול — חצי מארון התרופות בבית.",
+     "כמו להיות שותף במי שמכין את הפלסטר על הברך."),
+    ("BRK.B", "Berkshire Hathaway", "ברקשייר האת'וויי", "brands", "🎩", 572.21,
+     "Warren Buffett's company: it owns Dairy Queen, Duracell batteries, GEICO and a pile of shares.",
+     "החברה של וורן באפט: היא מחזיקה את דיירי קווין, סוללות דוראסל, ג'ייקו ועוד המון מניות.",
+     "קופסה ענקית שבתוכה עוד עשרות חברות מוכרות."),
     # ---------- מכונות, מטוסים וחלל ----------
     ("TSLA", "Tesla", "טסלה", "wheels", "⚡", 359.15,
      "Tesla builds fast electric cars, giant batteries and futuristic robots.",
@@ -201,6 +265,14 @@ STOCKS = [
      "Rocket Lab launches small satellites into space cheaply — a taxi to orbit.",
      "רוקט לאב משגרת לוויינים קטנים לחלל במחיר זול — 'מונית לחלל'.",
      "שליח שמביא לוויינים לחלל במקום חבילות לבית."),
+    ("F", "Ford", "פורד", "wheels", "🛻", 11.23,
+     "One of the oldest car makers — it invented the moving assembly line and still builds pickups.",
+     "מהיצרניות הוותיקות בעולם — המציאה את פס הייצור ועדיין בונה טנדרים.",
+     "המכונית הראשונה שממש כולם יכלו לקנות."),
+    ("TM", "Toyota", "טויוטה", "wheels", "🚙", 211.42,
+     "The biggest car maker in the world, famous for the Prius and for cars that last forever.",
+     "יצרנית הרכב הגדולה בעולם, מפורסמת בפריוס ובמכוניות שנוסעות לנצח.",
+     "המכונית היפנית ששורדת כל דרך."),
 ]
 
 def q(s: str) -> str:
@@ -234,7 +306,9 @@ lines.append("""// -------------------------------------------------------------
 // ---------------------------------------------------------------------------
 export const KIDS_STOCKS: Record<string, StockInfo> = {""")
 for (t, name, he_name, cat, logo, price, desc, hedesc, analogy) in STOCKS:
-    lines.append(f"  {t}: {{")
+    # A ticker like BRK.B is not a valid JS identifier, so the key gets quoted.
+    key = t if t.isidentifier() else q(t)
+    lines.append(f"  {key}: {{")
     lines.append(f"    ticker: {q(t)},")
     lines.append(f"    name: {q(name)},")
     lines.append(f"    heName: {q(he_name)},")
@@ -251,14 +325,21 @@ lines.append("""// -------------------------------------------------------------
 // Real closing prices measured 2026-09-28. Used only by the deterministic
 // simulator fallback (and as a sanity floor) when live data is unreachable.
 // ---------------------------------------------------------------------------
-const BASE_PRICES: Record<string, number> = {""")
+export const BASE_PRICES: Record<string, number> = {""")
 for (t, name, he_name, cat, logo, price, desc, hedesc, analogy) in STOCKS:
-    lines.append(f"  {t}: {price},")
+    key = t if t.isidentifier() else q(t)
+    lines.append(f"  {key}: {price},")
 lines.append("};\n")
 
 lines.append("""// Tickers that Alpaca does not serve (OTC / pink sheets) — these fall back to
 // Yahoo Finance for their quote.
-const ALPACA_UNSUPPORTED = new Set(['NTDOY']);
+export const ALPACA_UNSUPPORTED_TICKERS = new Set(['NTDOY']);
+
+// Yahoo writes some symbols with a dash where the exchange uses a dot
+// (Berkshire's BRK.B is BRK-B on Yahoo), so the Yahoo quote/history path asks
+// for the right symbol instead of 404-ing into the simulator.
+const YAHOO_SYMBOLS: Record<string, string> = { 'BRK.B': 'BRK-B' };
+const yahooSymbol = (ticker: string): string => YAHOO_SYMBOLS[ticker] || ticker;
 
 // Seed-based pseudo-random generator for stable daily fluctuations in the simulator
 function getDayVolatility(ticker: string, offsetDays: number = 0): number {
@@ -277,7 +358,7 @@ function getDayVolatility(ticker: string, offsetDays: number = 0): number {
   return -0.04 + rand * 0.085;
 }
 
-function simulatedQuote(ticker: string): StockQuote {
+export function simulatedQuote(ticker: string): StockQuote {
   const info = KIDS_STOCKS[ticker];
   const basePrice = BASE_PRICES[ticker] || 100.0;
   const fluc = getDayVolatility(ticker);
@@ -289,6 +370,9 @@ function simulatedQuote(ticker: string): StockQuote {
     logo: info.logo,
     sector: info.sector,
     category: info.category,
+    description: info.description,
+    heDescription: info.heDescription,
+    childAnalogy: info.childAnalogy,
     priceUsd: Number(priceUsd.toFixed(2)),
     changePercent: Number((fluc * 100).toFixed(2)),
     high24h: Number((priceUsd * (1 + Math.abs(fluc) * 0.3)).toFixed(2)),
@@ -301,7 +385,7 @@ function simulatedQuote(ticker: string): StockQuote {
 
 // ---------------------------------------------------------------------------
 // Quote cache — one batched Alpaca call for the whole directory, served from
-// memory for a few minutes. Keeps the UI fast with 44 tickers.
+// memory for a few minutes. Keeps the UI fast with the whole catalogue.
 // ---------------------------------------------------------------------------
 const QUOTE_TTL_MS = 5 * 60 * 1000;
 let quoteCache: { at: number; quotes: Record<string, StockQuote> } | null = null;
@@ -347,46 +431,104 @@ async function fetchAlpacaSnapshots(tickers: string[]): Promise<Record<string, a
 async function fetchYahooQuote(ticker: string): Promise<Partial<StockQuote> | null> {
   try {
     const res = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=5d&interval=1d`,
+      `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol(ticker)}?range=5d&interval=1d`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     if (!res.ok) return null;
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    const quotes = result?.indicators?.quote?.[0];
-    const timestamps = result?.timestamp;
-    if (!result || !quotes || !timestamps || timestamps.length === 0) return null;
-
-    const lastIdx = timestamps.length - 1;
-    const price = num(quotes.close?.[lastIdx]);
-    if (price === null) return null;
-
-    let prevClose = price;
-    for (let i = timestamps.length - 2; i >= 0; i--) {
-      const c = num(quotes.close?.[i]);
-      if (c !== null) {
-        prevClose = c;
-        break;
-      }
-    }
-    const dayHigh = num(quotes.high?.[lastIdx]) ?? price;
-    const dayLow = num(quotes.low?.[lastIdx]) ?? price;
-
-    return {
-      priceUsd: Number(price.toFixed(2)),
-      prevClose: Number(prevClose.toFixed(2)),
-      high24h: Number(Math.max(dayHigh, price).toFixed(2)),
-      low24h: Number(Math.min(dayLow, price).toFixed(2)),
-      volume: num(quotes.volume?.[lastIdx]) ?? 0,
-      lastUpdated: new Date(timestamps[lastIdx] * 1000).toISOString(),
-    };
+    return quoteFromYahooChart(await res.json());
   } catch (err) {
     console.warn(`[MarketService] Yahoo quote failed for ${ticker}`, err);
     return null;
   }
 }
 
-function mergeQuote(ticker: string, live: Partial<StockQuote> | null): StockQuote {
+/**
+ * Pure mapping of one Alpaca snapshot entry → quote fields.
+ * Returns null when the snapshot carries no usable price.
+ */
+export function quoteFromAlpacaSnapshot(snap: any): Partial<StockQuote> | null {
+  const price = num(snap?.latestTrade?.p) ?? num(snap?.dailyBar?.c);
+  if (price === null) return null;
+  const prevClose = num(snap?.prevDailyBar?.c) ?? num(snap?.dailyBar?.o) ?? price;
+  return {
+    priceUsd: price,
+    prevClose,
+    high24h: num(snap?.dailyBar?.h) ?? price,
+    low24h: num(snap?.dailyBar?.l) ?? price,
+    volume: num(snap?.dailyBar?.v) ?? 0,
+    lastUpdated: snap?.latestTrade?.t ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Pure mapping of a Yahoo Finance chart response → quote fields (used for
+ * tickers Alpaca cannot serve, e.g. OTC ADRs like NTDOY).
+ */
+export function quoteFromYahooChart(data: any): Partial<StockQuote> | null {
+  const result = data?.chart?.result?.[0];
+  const quotes = result?.indicators?.quote?.[0];
+  const timestamps: number[] = result?.timestamp;
+  if (!result || !quotes || !timestamps || timestamps.length === 0) return null;
+
+  const lastIdx = timestamps.length - 1;
+  const price = num(quotes.close?.[lastIdx]);
+  if (price === null) return null;
+
+  let prevClose = price;
+  for (let i = timestamps.length - 2; i >= 0; i--) {
+    const c = num(quotes.close?.[i]);
+    if (c !== null) {
+      prevClose = c;
+      break;
+    }
+  }
+  const dayHigh = num(quotes.high?.[lastIdx]) ?? price;
+  const dayLow = num(quotes.low?.[lastIdx]) ?? price;
+
+  return {
+    priceUsd: Number(price.toFixed(2)),
+    prevClose: Number(prevClose.toFixed(2)),
+    high24h: Number(Math.max(dayHigh, price).toFixed(2)),
+    low24h: Number(Math.min(dayLow, price).toFixed(2)),
+    volume: num(quotes.volume?.[lastIdx]) ?? 0,
+    lastUpdated: new Date(timestamps[lastIdx] * 1000).toISOString(),
+  };
+}
+
+/** Pure mapping of a Yahoo chart response → daily closes for the price chart. */
+export function historyFromYahooChart(data: any): { date: string; price: number }[] {
+  const result = data?.chart?.result?.[0];
+  const timestamps: number[] = result?.timestamp || [];
+  const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || [];
+  return timestamps
+    .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], price: closes[i] }))
+    .filter((p) => typeof p.price === 'number' && Number.isFinite(p.price))
+    .map((p) => ({ date: p.date, price: Number((p.price as number).toFixed(2)) }));
+}
+
+/** Deterministic simulated price curve — the last-resort fallback for charts. */
+export function simulatedHistory(
+  ticker: string,
+  range: '1D' | '1W' | '1M' | '1Y' = '1M'
+): { date: string; price: number }[] {
+  const basePrice = BASE_PRICES[ticker] || 100.0;
+  let days = 30;
+  if (range === '1D') days = 1;
+  if (range === '1W') days = 7;
+  if (range === '1Y') days = 365;
+
+  const out: { date: string; price: number }[] = [];
+  let currentPrice = basePrice;
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    currentPrice = currentPrice * (1 + getDayVolatility(ticker, i) * 0.4);
+    out.push({ date: d.toISOString().split('T')[0], price: Number(currentPrice.toFixed(2)) });
+  }
+  return out;
+}
+
+export function mergeQuote(ticker: string, live: Partial<StockQuote> | null): StockQuote {
   const info = KIDS_STOCKS[ticker];
   const fallback = simulatedQuote(ticker);
   const price = live?.priceUsd ?? fallback.priceUsd;
@@ -400,6 +542,9 @@ function mergeQuote(ticker: string, live: Partial<StockQuote> | null): StockQuot
     logo: info.logo,
     sector: info.sector,
     category: info.category,
+    description: info.description,
+    heDescription: info.heDescription,
+    childAnalogy: info.childAnalogy,
     priceUsd: Number(price.toFixed(2)),
     changePercent: Number(changePercent.toFixed(2)),
     high24h: live?.high24h ?? fallback.high24h,
@@ -421,22 +566,11 @@ async function refreshQuotes(): Promise<Record<string, StockQuote>> {
     let live: Partial<StockQuote> | null = null;
 
     if (snap) {
-      const price = num(snap.latestTrade?.p) ?? num(snap.dailyBar?.c);
-      if (price !== null) {
-        const prevClose = num(snap.prevDailyBar?.c) ?? num(snap.dailyBar?.o) ?? price;
-        live = {
-          priceUsd: price,
-          prevClose,
-          high24h: num(snap.dailyBar?.h) ?? price,
-          low24h: num(snap.dailyBar?.l) ?? price,
-          volume: num(snap.dailyBar?.v) ?? 0,
-          lastUpdated: snap.latestTrade?.t ?? new Date().toISOString(),
-        };
-      }
+      live = quoteFromAlpacaSnapshot(snap);
     }
 
     // Tickers Alpaca cannot serve (or a missing batch entry) go to Yahoo.
-    if (!live && ALPACA_UNSUPPORTED.has(ticker)) {
+    if (!live && ALPACA_UNSUPPORTED_TICKERS.has(ticker)) {
       live = await fetchYahooQuote(ticker);
     }
 
@@ -518,39 +652,18 @@ export const MarketService = {
     const yahooRange = range === '1D' ? '1d' : range === '1W' ? '5d' : range === '1Y' ? '1y' : '1mo';
     try {
       const res = await fetch(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=${yahooRange}&interval=1d`,
+        `https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol(ticker)}?range=${yahooRange}&interval=1d`,
         { headers: { 'User-Agent': 'Mozilla/5.0' } }
       );
       if (res.ok) {
-        const data = await res.json();
-        const result = data?.chart?.result?.[0];
-        const timestamps: number[] = result?.timestamp || [];
-        const closes: (number | null)[] = result?.indicators?.quote?.[0]?.close || [];
-        const history = timestamps
-          .map((ts, i) => ({ date: new Date(ts * 1000).toISOString().split('T')[0], price: closes[i] }))
-          .filter((p) => typeof p.price === 'number' && Number.isFinite(p.price))
-          .map((p) => ({ date: p.date, price: Number((p.price as number).toFixed(2)) }));
+        const history = historyFromYahooChart(await res.json());
         if (history.length >= 2) return history;
       }
     } catch (err) {
       console.warn(`[MarketService] Yahoo history failed for ${ticker}`, err);
     }
 
-    // Simulator curve fallback
-    const basePrice = BASE_PRICES[ticker] || 100.0;
-    let days = 30;
-    if (range === '1D') days = 1;
-    if (range === '1W') days = 7;
-    if (range === '1Y') days = 365;
-    const out: { date: string; price: number }[] = [];
-    let currentPrice = basePrice;
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      currentPrice = currentPrice * (1 + getDayVolatility(ticker, i) * 0.4);
-      out.push({ date: d.toISOString().split('T')[0], price: Number(currentPrice.toFixed(2)) });
-    }
-    return out;
+    return simulatedHistory(ticker, range);
   },
 };
 """)
