@@ -32,7 +32,7 @@ network or a running server. Change a rule → change/extend the test in the sam
 | `src/server/lots.ts` | `test/lots.test.ts` | One purchase = one lot, never merged; a lot's funding source binds it for life (pocket-funded → pocket, fund-funded → fund); whole-lot sales priced with each lot's own principal; gain/loss/break-even legs per lot; dust and empty selections rejected |
 | `src/server/rules.ts` | `test/trade-rules.test.ts` | Minimum order ₪10, 0.01-share slice floor, `validateBuyFunds` never lets a purchase exceed the chosen account (nothing is moved between accounts to cover it) |
 | `src/server/migrate.ts` | `test/migrations.test.ts` | Old `data/db.json` shapes keep working; migrations are idempotent and never overwrite existing values; the `lots` array is added but never seeded by the migrator |
-| `src/server/alpaca.ts` | `test/stock-catalog.test.ts` | All 44 tickers have a Hebrew name + description and a valid category; Alpaca/Yahoo payload parsing; simulator determinism |
+| `src/server/alpaca.ts` | `test/stock-catalog.test.ts` | All 62 tickers have a Hebrew name + description and a valid category; Alpaca/Yahoo payload parsing; simulator determinism |
 
 Two rules for the live checker `scripts/verify-guardrails.ts`:
 
