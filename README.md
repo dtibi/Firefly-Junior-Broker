@@ -93,6 +93,13 @@ so the kid sees that investing well is a series of decisions, not one lucky gues
 **Two accounts.** 🍬 *pocket money* (spending) and 📈 *the investing account* (its balance is the
 fund's cash **plus** the stocks at market value). The kid sees both, all the time.
 
+**The curve cannot lie about its own history.** Every day's valuation is rebuilt from the ledger —
+the fund's cash that day plus the shares he held × that day's close — and the app writes its own
+daily point at 23:50 and fills any day that was never written (on start, and before every daily
+write). The August 2026 hole in the middle of that curve is exactly why: the nightly trigger used
+to live outside the app, stopped for five weeks, and the chart drew a straight line across a month
+in which three real trades happened.
+
 **Allowance.** The parent records it in Firefly III — into the pocket, the fund or both. The app
 reads live balances from the ledger, so it shows up immediately, and it is never counted as
 investment profit.

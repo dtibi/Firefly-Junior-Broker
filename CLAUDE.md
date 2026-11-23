@@ -32,6 +32,7 @@ network or a running server. Change a rule → change/extend the test in the sam
 | `src/server/lots.ts` | `test/lots.test.ts` | One purchase = one lot, never merged; a lot's funding source binds it for life (pocket-funded → pocket, fund-funded → fund); whole-lot sales priced with each lot's own principal; gain/loss/break-even legs per lot; dust and empty selections rejected |
 | `src/server/rules.ts` | `test/trade-rules.test.ts` | Minimum order ₪10, 0.01-share slice floor, `validateBuyFunds` never lets a purchase exceed the chosen account (nothing is moved between accounts to cover it) |
 | `src/server/migrate.ts` | `test/migrations.test.ts` | Old `data/db.json` shapes keep working; migrations are idempotent and never overwrite existing values; the `lots` array is added but never seeded by the migrator |
+| `src/server/snapshot-backfill.ts` | `test/snapshot-backfill.test.ts` | A rebuilt day = fund cash + shares × that day's close; a lot sold ON a day is not in that day's row; an unpriced ticker is reported, never valued at zero silently |
 | `src/server/alpaca.ts` | `test/stock-catalog.test.ts` | All 62 tickers have a Hebrew name + description and a valid category; Alpaca/Yahoo payload parsing; simulator determinism |
 
 Two rules for the live checker `scripts/verify-guardrails.ts`:
@@ -45,6 +46,8 @@ Two rules for the live checker `scripts/verify-guardrails.ts`:
 
 ### Server entry (`server.ts`)
 Express server on port 3000. In dev, it mounts Vite as middleware for HMR; in production, it serves static files from `dist/`. All API routes are defined inline (no router modules).
+
+**The daily valuation writes itself.** `writeDailySnapshotsFor(date)` is the one writer (the `/api/cron/snapshots` route and the in-app timer both call it), and `catchUpMissingSnapshots()` fills any day with no row — on server start and before every daily write. A gap in the chart can therefore heal itself; a day the rules cannot value is reported (days before the lots era are handed to `scripts/rebuild-snapshot-history.py`), never invented.
 
 **API routes:**
 | Method | Path | Purpose |
@@ -62,6 +65,7 @@ Express server on port 3000. In dev, it mounts Vite as middleware for HMR; in pr
 | GET | `/api/ledger/:name/statement` | The bank statement: every movement of the two accounts in Hebrew, with a running balance, a monthly summary and a reconciliation flag |
 | POST | `/api/cron/snapshots` | Force daily valuation snapshot |
 | POST | `/api/admin/recalc-snapshots` | Rebuild the chart baseline of historical snapshots from Firefly III |
+| POST | `/api/admin/backfill-snapshots` | Fill the days that were never valued (`?dryRun=1&from=&until=` previews and writes nothing). The app also runs this itself — see the daily writer above |
 
 ### Backend services (`src/server/`)
 
@@ -75,6 +79,7 @@ Express server on port 3000. In dev, it mounts Vite as middleware for HMR; in pr
 
 - **`lots.ts`** — Pure lot ("מגרש") rules: `newLot()`, `planLotSale()`, `planLotSales()`, `closeLot()`, `aggregateLots()`, `openLots()`, `summarizeLots()`. One purchase = one lot, never merged; whole-lot sales are priced with each lot's own principal; a lot's `fundingSource` decides where the sale's money returns. The aggregate `Holding` row the dashboard shows is derived from the open lots.
 
+- **`scripts/rebuild-snapshot-history.py`** + **`scripts/apply-snapshot-rebuild.py`** — the deep repair for days that predate the lots model (the app's own catch-up covers every day since then). PLAN mode walks the investments account's journals day by day and prints every changed row; APPLY mode needs the container stopped, backs `data/db.json` up and exports each changed row. Validated by the walk ending on exactly the live holdings — used on 2026-11-23 to rebuild 19.07 → 22.11 for both kids (123 days added, 55 rows corrected; the old chart had 13.08.2026 showing a stock value smaller than SPY alone).
 - **`scripts/seed-legacy-lots.py`** — The audited one-off that turned the five surviving weighted-average positions into lots (₪181.00 = Firefly account 26). Refuses to run while the container is up or when the numbers do not reconcile; supports `--apply` (default is a dry run).
 
 - **`alpaca.ts`** (`MarketService`) — Stock market data for a 62-ticker kid-friendly catalogue (54 companies + 8 baskets) defined in `KIDS_STOCKS`, grouped into 9 categories (`STOCK_CATEGORIES`) and documented with Hebrew descriptions (`heDescription`) + playground analogies (`childAnalogy`). Quotes come from **one batched Alpaca call** for the whole catalogue (`/v2/stocks/snapshots?symbols=...`), cached in memory for 5 minutes; tickers Alpaca cannot serve (OTC, e.g. NTDOY) fall back to Yahoo Finance, and a deterministic seed-based simulator keyed on ticker+date is the last resort. `getStockHistory()` returns real daily closes from Yahoo with a simulator curve as fallback. Fetches ILS→USD FX rates from `open.er-api.com` with 1-hour caching. (Alpha Vantage was removed from the code path — it was limited to 25 requests/day and practically never reached.)

@@ -34,6 +34,155 @@ import {
 import { AIService } from './src/server/ai.js';
 import { FundingSource, SellReasonCode, TradeRequest, TradeResponse } from './src/types.js';
 import { isSellReasonCode, sellReasonHe, SELL_REASON_NOTE_MAX } from './src/sell-reasons.js';
+import {
+  missingDays,
+  positionsOn,
+  closeOn,
+  accountBalanceOn,
+  reconstructSnapshot,
+} from './src/server/snapshot-backfill.js';
+
+
+/**
+ * Writes the valuation snapshot of ONE day for every profile (upsert by profile+date).
+ * The /api/cron/snapshots route and the in-app daily timer both call this, so "the cron
+ * wrote it" and "the app wrote it" can never drift into two different definitions.
+ */
+async function writeDailySnapshotsFor(dateStr: string) {
+  const profiles = Database.getProfiles();
+  const fxRate = await MarketService.getILSExchangeRate();
+  const written: string[] = [];
+
+  for (const p of profiles) {
+    const financials = await LedgerService.getFinancialBreakdown(p);
+    const cashLocal = financials?.accounts.savings?.balance ?? Database.getCashBalance(p.name);
+    const pocketLocal = financials?.accounts.checking?.balance ?? 0;
+    // Same source of truth as /api/portfolio: lots win over the legacy holdings
+    // table once a profile has any. A purchase writes ONLY a lot, so valuing from
+    // the holdings table would silently drop newly bought positions (the 10/07
+    // NFLX incident: the chart showed a fake -36 NIS loss while the live portfolio
+    // showed a +14 profit).
+    const storedLots = Database.getLots(p.name);
+    const hasLots = storedLots.length > 0;
+    const holdings = hasLots ? aggregateLots(storedLots, p.name) : Database.getHoldings(p.name);
+
+    let totalStockValueUsd = 0;
+    for (const h of holdings) {
+      try {
+        const q = await MarketService.getStockQuote(h.ticker);
+        totalStockValueUsd += h.shares * q.priceUsd;
+      } catch (e) {
+        totalStockValueUsd += h.shares * h.averagePriceUsd;
+      }
+    }
+
+    const fxFactor = p.currencyMode === 'PARITY' ? 1.0 : fxRate;
+    const cashUsd = p.currencyMode === 'PARITY' ? cashLocal : (cashLocal * fxFactor);
+    const totalValueUsd = cashUsd + totalStockValueUsd;
+
+    // The baseline is the money that really came in from outside (allowance, work
+    // income, pocket-money transfers) — never trading profit.
+    const cumulativeDepositsLocal = financials?.investedFromOutsideLocal ?? (p.cumulativeDeposits || 0);
+    const cumulativeDepositsUsd = p.currencyMode === 'PARITY' ? cumulativeDepositsLocal : (cumulativeDepositsLocal * fxFactor);
+
+    Database.addSnapshot({
+      date: dateStr,
+      profileName: p.name,
+      totalValueUsd: Number(totalValueUsd.toFixed(2)),
+      cashUsd: Number(cashUsd.toFixed(2)),
+      stockValueUsd: Number(totalStockValueUsd.toFixed(2)),
+      cumulativeDepositsUsd: Number(cumulativeDepositsUsd.toFixed(2)),
+      cumulativeDepositsLocal: Number(cumulativeDepositsLocal.toFixed(2)),
+      totalValueLocal: p.currencyMode === 'PARITY' ? Number(totalValueUsd.toFixed(2)) : Number((totalValueUsd / fxFactor).toFixed(2)),
+      spendingLocal: Number(pocketLocal.toFixed(2)),
+      investFundLocal: Number(cashLocal.toFixed(2)),
+    });
+    written.push(p.name);
+  }
+
+  return { date: dateStr, profiles: written };
+}
+
+/**
+ * Fills the days the daily writer never wrote.
+ *
+ * Why this exists: the writer can only value the day it runs, so when the nightly trigger
+ * stopped (13.08 -> 17.09.2026 has no rows at all, while the ledger went on recording
+ * allowances and three trades) the chart kept a hole nobody was told about. Every day is
+ * rebuilt from the ledger: the fund's cash, the shares held that day × that day's close,
+ * and the deposits baseline as of that day. A day the rules cannot value is REPORTED, never
+ * invented — days before the lots era are handed to scripts/rebuild-snapshot-history.py.
+ */
+async function catchUpMissingSnapshots(opts: { dryRun?: boolean; from?: string; until?: string } = {}) {
+  const today = localDateString();
+  const yesterday = localDateString(new Date(Date.now() - 86400000));
+  const until = opts.until && opts.until.length === 10 ? opts.until : yesterday;
+  const report: any[] = [];
+
+  for (const p of Database.getProfiles()) {
+    const stored = Database.getSnapshots(p.name);
+    const storedDates = stored.map((s) => s.date);
+    const lots = Database.getLots(p.name);
+    const earliestLot = (lots.map((l: any) => String(l.acquiredAt || '').slice(0, 10)).filter(Boolean).sort()[0]) || '';
+    const from = opts.from && opts.from.length === 10 ? opts.from : (storedDates[0] || earliestLot || today);
+    const days = missingDays(storedDates, from, until);
+    const rows: any[] = [];
+    const skipped: { date: string; reason: string }[] = [];
+
+    if (days.length && (!p.savingsAccountId || !p.spendingAccountId)) {
+      report.push({ profile: p.name, days: days.length, filled: 0, skipped: days.map((date) => ({ date, reason: 'no linked Firefly accounts' })), rows: [] });
+      continue;
+    }
+
+    const fundJournals = days.length ? await LedgerService.getAccountJournals(p.savingsAccountId!) : [];
+    const pocketJournals = days.length ? await LedgerService.getAccountJournals(p.spendingAccountId!) : [];
+    let carriedDeposits: number | null = stored.length ? stored[stored.length - 1].cumulativeDepositsLocal : null;
+
+    for (const day of days) {
+      if (earliestLot && lots.length && day < earliestLot) {
+        skipped.push({ date: day, reason: 'before the lots era — use scripts/rebuild-snapshot-history.py' });
+        continue;
+      }
+      const positions = positionsOn(lots as any, day);
+      const closes: Record<string, number | undefined> = {};
+      for (const position of positions) {
+        if (closes[position.ticker] !== undefined) continue;
+        try {
+          closes[position.ticker] = closeOn(await MarketService.getStockHistory(position.ticker, '1Y'), day) ?? undefined;
+        } catch (e) {
+          closes[position.ticker] = undefined;
+        }
+      }
+      let depositsLocal = await LedgerService.getInvestedBaselineAsOf(p.name, day);
+      let depositsSource = 'ledger';
+      if (depositsLocal === null || depositsLocal === undefined) {
+        depositsLocal = carriedDeposits ?? p.cumulativeDeposits ?? 0;
+        depositsSource = 'carried';
+      }
+      carriedDeposits = depositsLocal;
+      const row = reconstructSnapshot({
+        date: day,
+        cashLocal: accountBalanceOn(fundJournals, p.savingsAccountId!, day),
+        pocketLocal: accountBalanceOn(pocketJournals, p.spendingAccountId!, day),
+        positions,
+        closes,
+        depositsLocal,
+      });
+      const { unpricedTickers, ...snapshot } = row;
+      rows.push({ ...snapshot, unpricedTickers, depositsSource });
+      if (!opts.dryRun) {
+        Database.addSnapshot({ profileName: p.name, ...snapshot } as any);
+      }
+    }
+
+    if (!opts.dryRun && rows.length) {
+      LedgerService.invalidateBreakdown(p.name);
+    }
+    report.push({ profile: p.name, days: days.length, filled: rows.length, skipped, rows });
+  }
+
+  return { dryRun: !!opts.dryRun, until, report };
+}
 
 const PORT = 3000;
 
@@ -617,61 +766,20 @@ async function startServer() {
   // The app reads live balances from Firefly, so any deposit made there is instantly reflected.
 
   // 11. Force Valuation snapshots worker (Nightly / Daily schedule trigger)
+  //     The in-app timer calls the same writeDailySnapshotsFor(), so both paths book the
+  //     same numbers; this route stays for the external trigger and manual use.
   app.post('/api/cron/snapshots', async (req, res) => {
     try {
       // Local date (not UTC): the nightly cron runs at 23:50 local, and a UTC
       // stamp would file "tonight" under tomorrow/yesterday depending on the zone.
-      const dateStr = localDateString();
-      const profiles = Database.getProfiles();
-      const fxRate = await MarketService.getILSExchangeRate();
+      const out = await writeDailySnapshotsFor(localDateString());
+      return res.json({
+        success: true,
+        message: `Valuation snapshots successfully recorded for ${out.profiles.length} profiles for date ${out.date}.`,
+        date: out.date,
+        profiles: out.profiles,
+      });
 
-      for (const p of profiles) {
-        const financials = await LedgerService.getFinancialBreakdown(p);
-        const cashLocal = financials?.accounts.savings?.balance ?? Database.getCashBalance(p.name);
-        const pocketLocal = financials?.accounts.checking?.balance ?? 0;
-        // Same source of truth as /api/portfolio: lots win over the legacy
-        // holdings table once a profile has any. A purchase writes ONLY a lot,
-        // so valuing from the holdings table would silently drop newly bought
-        // positions (the 10/07 NFLX incident: the daily chart showed a fake
-        // -36 NIS loss while the live portfolio showed a +14 profit).
-        const storedLots = Database.getLots(p.name);
-        const hasLots = storedLots.length > 0;
-        const holdings = hasLots ? aggregateLots(storedLots, p.name) : Database.getHoldings(p.name);
-
-        let totalStockValueUsd = 0;
-        for (const h of holdings) {
-          try {
-            const q = await MarketService.getStockQuote(h.ticker);
-            totalStockValueUsd += h.shares * q.priceUsd;
-          } catch (e) {
-            totalStockValueUsd += h.shares * h.averagePriceUsd;
-          }
-        }
-
-        const fxFactor = p.currencyMode === 'PARITY' ? 1.0 : fxRate;
-        const cashUsd = p.currencyMode === 'PARITY' ? cashLocal : (cashLocal * fxFactor);
-        const totalValueUsd = cashUsd + totalStockValueUsd;
-
-        // The baseline is the money that really came in from outside (allowance,
-        // work income, pocket-money transfers) — never trading profit.
-        const cumulativeDepositsLocal = financials?.investedFromOutsideLocal ?? (p.cumulativeDeposits || 0);
-        const cumulativeDepositsUsd = p.currencyMode === 'PARITY' ? cumulativeDepositsLocal : (cumulativeDepositsLocal * fxFactor);
-
-        Database.addSnapshot({
-          date: dateStr,
-          profileName: p.name,
-          totalValueUsd: Number(totalValueUsd.toFixed(2)),
-          cashUsd: Number(cashUsd.toFixed(2)),
-          stockValueUsd: Number(totalStockValueUsd.toFixed(2)),
-          cumulativeDepositsUsd: Number(cumulativeDepositsUsd.toFixed(2)),
-          cumulativeDepositsLocal: Number(cumulativeDepositsLocal.toFixed(2)),
-          totalValueLocal: p.currencyMode === 'PARITY' ? Number(totalValueUsd.toFixed(2)) : Number((totalValueUsd / fxFactor).toFixed(2)),
-          spendingLocal: Number(pocketLocal.toFixed(2)),
-          investFundLocal: Number(cashLocal.toFixed(2)),
-        });
-      }
-
-      res.json({ success: true, message: `Valuation snapshots successfully recorded for ${profiles.length} profiles for date ${dateStr}.` });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -819,6 +927,7 @@ async function startServer() {
             cumulativeDepositsLocal: baseline,
             cumulativeDepositsUsd: p.currencyMode === 'PARITY' ? baseline : Number((baseline * fxRate).toFixed(2)),
           });
+
           updated += 1;
         }
 
@@ -830,6 +939,31 @@ async function startServer() {
       }
 
       res.json({ success: true, report });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 5b. Fill the days the daily writer never wrote (a gap in the chart's history).
+  //     ?dryRun=1 prints what it would write and changes nothing — use it before any write.
+  app.post('/api/admin/backfill-snapshots', async (req, res) => {
+    try {
+      const out = await catchUpMissingSnapshots({
+        dryRun: String(req.query.dryRun ?? '') === '1',
+        from: typeof req.query.from === 'string' ? req.query.from : undefined,
+        until: typeof req.query.until === 'string' ? req.query.until : undefined,
+      });
+      const filled = out.report.reduce((n: number, r: any) => n + r.filled, 0);
+      res.json({
+        success: true,
+        dryRun: out.dryRun,
+        until: out.until,
+        filled,
+        message: out.dryRun
+          ? `DRY RUN: ${filled} day(s) would be written for ${out.report.length} profile(s).`
+          : `Wrote ${filled} missing day(s) for ${out.report.length} profile(s).`,
+        report: out.report,
+      });
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
@@ -852,6 +986,42 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // ---- the daily snapshot, written from inside the app -------------------------------------
+  // The nightly trigger lives OUTSIDE this container, and when it stops nothing fills the hole
+  // (13.08 -> 17.09.2026: no rows at all while the ledger kept recording). Two belts now:
+  //   1. a timer that writes today's valuation at 23:50 local (idempotent, upserts by date),
+  //   2. a catch-up that fills any day that was never written — on start, and before every
+  //      daily write, so a missed day heals itself instead of leaving a step in the chart.
+  const DAILY_WRITE_MINUTES = 23 * 60 + 50;
+  let lastDailyWrite = '';
+
+  const dailyTick = async () => {
+    const now = new Date();
+    const today = localDateString(now);
+    if (now.getHours() * 60 + now.getMinutes() < DAILY_WRITE_MINUTES) return;
+    if (lastDailyWrite === today) return;
+    lastDailyWrite = today;
+    const caught = await catchUpMissingSnapshots();
+    const filled = caught.report.reduce((n: number, r: any) => n + r.filled, 0);
+    const written = await writeDailySnapshotsFor(today);
+    console.log(
+      `[snapshots] daily write ${today}: filled ${filled} missing day(s), wrote today for ${written.profiles.length} profile(s)`
+    );
+  };
+
+  setInterval(() => {
+    dailyTick().catch((err) => console.warn('[snapshots] daily tick failed', err));
+  }, 5 * 60 * 1000);
+
+  setTimeout(() => {
+    catchUpMissingSnapshots()
+      .then((out) => {
+        const parts = out.report.map((r: any) => `${r.profile}: +${r.filled}`).join(', ');
+        console.log(`[snapshots] startup catch-up (until ${out.until}) — ${parts || 'nothing missing'}`);
+      })
+      .catch((err) => console.warn('[snapshots] startup catch-up failed', err));
+  }, 15000);
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
