@@ -36,6 +36,7 @@ import { SELL_REASONS, SELL_REASON_NOTE_MAX, sellReasonLabelHe } from './sell-re
 import PinPad from './components/PinPad.tsx';
 import AiCoachModal from './components/AiCoachModal.tsx';
 import PerformanceChart from './components/PerformanceChart.tsx';
+import { WealthRange, filterByRange, rangeIsTruncated, monthsOfHistory } from './wealth-ranges.js';
 import TradePanel from './components/TradePanel.tsx';
 import { useTranslation } from './i18n/useTranslation';
 
@@ -85,6 +86,11 @@ export default function App() {
   const [tradeRowTicker, setTradeRowTicker] = useState<string | null>(null);
   const [tradeRowIntent, setTradeRowIntent] = useState<'BUY' | 'SELL'>('BUY');
   const [myStocksOnly, setMyStocksOnly] = useState<boolean>(false);
+  // "ביצועי ההון שלי": the period the chart shows, and whether it shows ₪ or the period's own
+  // percentage (approved 2026-11-23). The ranges are measured from the newest snapshot, never
+  // from the browser clock, so a day the writer has not reached yet cannot empty the chart.
+  const [chartRange, setChartRange] = useState<WealthRange>('ALL');
+  const [chartMode, setChartMode] = useState<'MONEY' | 'PERCENT'>('MONEY');
   const [showPinPad, setShowPinPad] = useState<'login' | 'trade_buy' | 'trade_sell' | null>(null);
   const [targetProfileToLogin, setTargetProfileToLogin] = useState<Profile | null>(null);
   const [showAiModal, setShowAiModal] = useState<string | null>(null); // stock ticker
@@ -287,6 +293,31 @@ export default function App() {
   const localeTag = locale === 'he' ? 'he-IL' : 'en-GB';
   const fmtDate = (value: string | number | Date) => new Date(value).toLocaleDateString(localeTag);
   const fmtDateTime = (value: string | number | Date) => new Date(value).toLocaleString(localeTag);
+
+  const CHART_RANGES: { key: WealthRange; label: string }[] = [
+    { key: 'WEEK', label: 'dashboard.rangeWeek' },
+    { key: 'MONTH', label: 'dashboard.rangeMonth' },
+    { key: 'YEAR', label: 'dashboard.rangeYear' },
+    { key: 'YTD', label: 'dashboard.rangeYtd' },
+    { key: 'TWO_YEARS', label: 'dashboard.rangeTwoYears' },
+    { key: 'THREE_YEARS', label: 'dashboard.rangeThreeYears' },
+    { key: 'ALL', label: 'dashboard.rangeAll' },
+  ];
+  const chartPoints = (() => {
+    if (!selectedProfile) return [];
+    const isParity = selectedProfile.currencyMode === 'PARITY';
+    const rate = summary?.fxRate ?? 3.75;
+    return snapshots.map((s) => ({
+      date: s.date,
+      price: isParity ? s.totalValueUsd : (s.totalValueLocal ?? s.totalValueUsd * rate),
+      cumulativeDeposits: isParity
+        ? (s.cumulativeDepositsUsd ?? 500)
+        : (s.cumulativeDepositsLocal ?? ((s.cumulativeDepositsUsd ?? 1000) * rate)),
+    }));
+  })();
+  const chartWindow = filterByRange(chartPoints, chartRange);
+  const chartHistoryTruncated = rangeIsTruncated(chartPoints, chartRange);
+  const chartHistoryMonths = monthsOfHistory(chartPoints);
 
   // Stock directory filtering: category chips + free-text search
   const ownedTickers = new Set(holdings.map((h) => h.ticker));
@@ -1037,18 +1068,56 @@ export default function App() {
                             {t('dashboard.dayGrowth')}
                           </span>
                         </div>
+                        {/* Period picker + ₪ / % toggle (approved 2026-11-23) */}
+                        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                          {CHART_RANGES.map((r) => (
+                            <button
+                              key={r.key}
+                              onClick={() => setChartRange(r.key)}
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                                chartRange === r.key
+                                  ? 'bg-indigo-600 text-white border-indigo-600'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                              }`}
+                            >
+                              {t(r.label)}
+                            </button>
+                          ))}
+                          <span className="mx-1 h-5 w-px bg-slate-200" />
+                          <button
+                            onClick={() => setChartMode('MONEY')}
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                              chartMode === 'MONEY'
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            ₪ {t('dashboard.viewMoney')}
+                          </button>
+                          <button
+                            onClick={() => setChartMode('PERCENT')}
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer ${
+                              chartMode === 'PERCENT'
+                                ? 'bg-emerald-600 text-white border-emerald-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300'
+                            }`}
+                          >
+                            % {t('dashboard.viewPercent')}
+                          </button>
+                        </div>
+
+                        {/* A range longer than the recorded history says so instead of pretending */}
+                        {chartHistoryTruncated && chartWindow.length > 1 && (
+                          <p className="text-[10px] font-bold text-slate-400 mb-3">
+                            {t('dashboard.historyStarts')}
+                            {fmtDate(chartWindow[0].date)} ({chartHistoryMonths} {t('dashboard.monthsOfHistory')}) —{' '}
+                            {t('dashboard.historyOnly')}
+                          </p>
+                        )}
+
                         <PerformanceChart
-                          data={snapshots.map((s) => {
-                            const isParity = selectedProfile.currencyMode === 'PARITY';
-                            const rate = summary?.fxRate ?? 3.75;
-                            const priceVal = isParity ? s.totalValueUsd : (s.totalValueLocal ?? (s.totalValueUsd * rate));
-                            const depositsVal = isParity ? (s.cumulativeDepositsUsd ?? 500) : (s.cumulativeDepositsLocal ?? ((s.cumulativeDepositsUsd ?? 1000) * rate));
-                            return {
-                              date: s.date,
-                              price: priceVal,
-                              cumulativeDeposits: depositsVal,
-                            };
-                          })}
+                          data={chartWindow}
+                          mode={chartMode}
                           color="indigo"
                           currencySymbol="₪"
                         />

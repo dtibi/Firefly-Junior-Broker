@@ -6,6 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { useTranslation } from '../i18n/useTranslation';
+import { percentSeries, rangeSummary } from '../wealth-ranges.js';
 
 interface ChartDataPoint {
   date: string;
@@ -13,11 +14,20 @@ interface ChartDataPoint {
   cumulativeDeposits?: number; // Optional Net Invested Capital (Deposits baseline)
 }
 
+export type ChartMode = 'MONEY' | 'PERCENT';
+
 interface PerformanceChartProps {
   data: ChartDataPoint[];
   color?: string; // 'emerald' | 'indigo' | 'amber'
   height?: number;
   currencySymbol?: string;
+  /**
+   * MONEY (default): the portfolio value against the money that came in from outside, in ₪.
+   * PERCENT: the dashboard's ONE percentage for the chosen period — what the portfolio did with
+   * the stocks it held, indexed to 0% at the period's first day, with every flow in or out of
+   * the investing world excluded (approved 2026-11-23). No deposits line, and no second %.
+   */
+  mode?: ChartMode;
 }
 
 export default function PerformanceChart({
@@ -25,14 +35,28 @@ export default function PerformanceChart({
   color = 'indigo',
   height = 200,
   currencySymbol = '₪',
+  mode = 'MONEY',
 }: PerformanceChartProps) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  // The kid reads day-first dates (16 בנוב׳ in Hebrew), never the browser's month/day default.
+  const localeTag = locale === 'he' ? 'he-IL' : 'en-GB';
+  const fmtDate = (value: string) => new Date(value).toLocaleDateString(localeTag, { month: 'short', day: 'numeric' });
+  const fmtDateFull = (value: string) => new Date(value).toLocaleDateString(localeTag, { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const percentMode = mode === 'PERCENT' && data.length > 1;
+  // In percent mode the drawn series is the period's own change; each day's ₪ value is kept for
+  // the tooltip, so the money behind a percentage is never hidden from the kid.
+  const percentPoints = useMemo(() => (percentMode ? percentSeries(data) : []), [data, percentMode]);
+  const summary = useMemo(() => rangeSummary(data), [data]);
 
   const points = useMemo(() => {
     if (!data || data.length === 0) return [];
+    if (percentMode) {
+      return percentPoints.map((p) => ({ date: p.date, price: p.percent, cumulativeDeposits: undefined as number | undefined }));
+    }
     return data;
-  }, [data]);
+  }, [data, percentMode, percentPoints]);
 
   const {
     path,
@@ -62,7 +86,8 @@ export default function PerformanceChart({
     const chartWidth = width - margin.left - margin.right;
     const chartHeight = height - margin.top - margin.bottom;
 
-    const hasDeps = points.some((p) => p.cumulativeDeposits !== undefined);
+    // The deposits baseline belongs to money mode only; a percentage has no such line.
+    const hasDeps = !percentMode && points.some((p) => p.cumulativeDeposits !== undefined);
 
     // Get prices and deposits to establish scale bounds
     const prices = points.map((p) => p.price);
@@ -72,13 +97,14 @@ export default function PerformanceChart({
     let minVal = Math.min(...allVals);
     let maxVal = Math.max(...allVals);
 
-    // Add padding to prevent flatlines from clipping
+    // Add padding to prevent flatlines from clipping. Money never goes below zero, but a
+    // percentage does — clamping it there would flatten half the story.
     if (minVal === maxVal) {
-      minVal = Math.max(0, minVal - 50);
-      maxVal += 50;
+      minVal = percentMode ? minVal - 1 : Math.max(0, minVal - 50);
+      maxVal = percentMode ? maxVal + 1 : maxVal + 50;
     } else {
       const diff = maxVal - minVal;
-      minVal = Math.max(0, minVal - diff * 0.15);
+      minVal = percentMode ? minVal - diff * 0.15 : Math.max(0, minVal - diff * 0.15);
       maxVal = maxVal + diff * 0.15;
     }
 
@@ -142,7 +168,7 @@ export default function PerformanceChart({
       yMax: maxVal,
       hasDeposits: hasDeps,
     };
-  }, [points, height]);
+  }, [points, height, percentMode]);
 
   if (points.length === 0) {
     return (
@@ -157,29 +183,50 @@ export default function PerformanceChart({
   const stopColor = color === 'emerald' ? 'rgba(16, 185, 129, 0.25)' : color === 'amber' ? 'rgba(245, 158, 11, 0.25)' : 'rgba(99, 102, 241, 0.25)';
 
   // Calculate overall change summary for header card info (only if hasDeposits is true)
-  const latestPoint = points[points.length - 1];
-  const initialPoint = points[0];
+  const latestPoint = data[data.length - 1];
   const totalReturn = hasDeposits ? latestPoint.price - (latestPoint.cumulativeDeposits ?? 0) : 0;
   const totalReturnPercent = hasDeposits && (latestPoint.cumulativeDeposits ?? 0) > 0 ? (totalReturn / (latestPoint.cumulativeDeposits ?? 1)) * 100 : 0;
   const isReturnPositive = totalReturn >= 0;
+  const isPeriodPositive = summary.changeLocal >= 0;
+  const money = (v: number) =>
+    `${currencySymbol}${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="relative w-full bg-white p-6 rounded-[28px] border border-slate-200 shadow-sm space-y-4">
       {/* Educational Metric Header (only rendered for portfolio snapshots) */}
-      {hasDeposits && (
+      {(hasDeposits || percentMode) && (
         <div className="flex flex-wrap justify-between items-end gap-3 pb-2 border-b border-slate-100">
+          {percentMode ? (
+            <>
+              {/* ONE percentage on this screen: the period's own change. No second number. */}
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.todayValue')}</span>
+                <p className="text-xl font-extrabold text-slate-900 mt-0.5">{money(latestPoint.price)}</p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  {t('dashboard.periodChange')} · {fmtDate(summary.from)}
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5 justify-end">
+                  <span className={`text-base font-extrabold ${isPeriodPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {isPeriodPositive ? '+' : ''}{money(summary.changeLocal)}
+                  </span>
+                  <span className={`text-xs font-black px-2 py-0.5 rounded-full ${isPeriodPositive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/40' : 'bg-rose-50 text-rose-700 border border-rose-200/40'}`}>
+                    {isPeriodPositive ? '▲' : '▼'} {summary.percent.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+          <>
           <div className="flex items-center gap-4">
             <div>
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.totalValue')}</span>
-              <p className="text-xl font-extrabold text-slate-900 mt-0.5">
-                {currencySymbol}{latestPoint.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              <p className="text-xl font-extrabold text-slate-900 mt-0.5">{money(latestPoint.price)}</p>
             </div>
             <div className="border-l border-slate-200 pl-4">
               <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.totalSavingsPutIn')}</span>
-              <p className="text-xl font-extrabold text-slate-700 mt-0.5">
-                {currencySymbol}{(latestPoint.cumulativeDeposits ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
+              <p className="text-xl font-extrabold text-slate-700 mt-0.5">{money(latestPoint.cumulativeDeposits ?? 0)}</p>
             </div>
           </div>
 
@@ -187,13 +234,15 @@ export default function PerformanceChart({
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{t('dashboard.marketGainsReturns')}</span>
             <div className="flex items-center gap-1.5 mt-0.5 justify-end">
               <span className={`text-base font-extrabold ${isReturnPositive ? 'text-emerald-600' : 'text-rose-600'}`}>
-                {isReturnPositive ? '+' : ''}{currencySymbol}{totalReturn.toFixed(2)}
+                {isReturnPositive ? '+' : ''}{money(totalReturn)}
               </span>
               <span className={`text-xs font-black px-2 py-0.5 rounded-full ${isReturnPositive ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/40' : 'bg-rose-50 text-rose-700 border border-rose-200/40'}`}>
                 {isReturnPositive ? '▲' : '▼'} {totalReturnPercent.toFixed(2)}%
               </span>
             </div>
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -222,7 +271,7 @@ export default function PerformanceChart({
                   strokeDasharray="4 4"
                 />
                 <text x="44" y={y + 3} fill="#475569" fontSize="9" fontWeight="bold" textAnchor="end">
-                  {hasDeposits ? currencySymbol : '$'}{priceVal.toFixed(0)}
+                  {percentMode ? `${priceVal.toFixed(1)}%` : `${hasDeposits ? currencySymbol : '$'}${priceVal.toFixed(0)}`}
                 </text>
               </g>
             );
@@ -234,6 +283,20 @@ export default function PerformanceChart({
           {/* SVG Deposits Baseline (subtle dashed line underneath) */}
           {hasDeposits && (
             <path d={depositsPath} fill="none" stroke="#94a3b8" strokeWidth="2" strokeDasharray="5 3" strokeLinecap="round" opacity="0.65" />
+          )}
+
+          {/* Zero line in percent mode — "nothing gained, nothing lost" since the period's start */}
+          {percentMode && yMin < 0 && yMax > 0 && (
+            <line
+              x1="50"
+              y1={25 + (1 - (0 - yMin) / (yMax - yMin)) * (height - 50)}
+              x2="485"
+              y2={25 + (1 - (0 - yMin) / (yMax - yMin)) * (height - 50)}
+              stroke="#94a3b8"
+              strokeWidth="1.5"
+              strokeDasharray="6 4"
+              opacity="0.7"
+            />
           )}
 
           {/* SVG Curve Path (Total Value) */}
@@ -269,10 +332,10 @@ export default function PerformanceChart({
           {coords.length > 1 && (
             <g className="text-[9px] fill-slate-400 font-bold opacity-75">
               <text x="50" y={height - 4} textAnchor="start">
-                {new Date(coords[0].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                {fmtDate(coords[0].date)}
               </text>
               <text x="485" y={height - 4} textAnchor="end">
-                {new Date(coords[coords.length - 1].date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                {fmtDate(coords[coords.length - 1].date)}
               </text>
             </g>
           )}
@@ -301,6 +364,29 @@ export default function PerformanceChart({
         {hoveredIndex !== null && coords[hoveredIndex] && (() => {
           const c = coords[hoveredIndex];
 
+          if (percentMode) {
+            const pct = c.price;
+            const pos = pct >= 0;
+            const valueThen = percentPoints[hoveredIndex]?.valueLocal ?? 0;
+            return (
+              <div className="absolute top-2 right-2 bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-2xl text-[10px] font-bold border border-slate-800 shadow-xl space-y-1.5 min-w-[160px] pointer-events-none z-10">
+                <p className="text-slate-400 uppercase font-extrabold tracking-wider border-b border-slate-800 pb-1 text-[9px]">
+                  {fmtDateFull(c.date)}
+                </p>
+                <div className="flex justify-between gap-4">
+                  <span className="text-slate-400 font-semibold">{t('chart.totalWealth')}:</span>
+                  <span className="font-extrabold text-white">{money(valueThen)}</span>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-slate-800 pt-1.5">
+                  <span className="text-slate-400 font-semibold">{t('chart.sinceRangeStart')}:</span>
+                  <span className={`font-black ${pos ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {pos ? '+' : ''}{pct.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
           if (hasDeposits) {
             const depVal = c.cumulativeDeposits ?? c.price;
             const gain = c.price - depVal;
@@ -310,7 +396,7 @@ export default function PerformanceChart({
             return (
               <div className="absolute top-2 right-2 bg-slate-900/95 backdrop-blur-md text-white p-4 rounded-2xl text-[10px] font-bold border border-slate-800 shadow-xl space-y-1.5 min-w-[160px] pointer-events-none z-10">
                 <p className="text-slate-400 uppercase font-extrabold tracking-wider border-b border-slate-800 pb-1 text-[9px]">
-                  {new Date(c.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {fmtDateFull(c.date)}
                 </p>
                 <div className="flex justify-between gap-4">
                   <span className="text-slate-400 font-semibold">{t('chart.totalWealth')}:</span>
@@ -332,7 +418,7 @@ export default function PerformanceChart({
             return (
               <div className="absolute top-2 right-2 bg-slate-900/95 backdrop-blur-md text-white p-3 rounded-xl text-[10px] font-bold border border-slate-800 shadow-xl pointer-events-none z-10">
                 <p className="text-slate-400 uppercase font-extrabold tracking-wider border-b border-slate-800 pb-1 text-[9px]">
-                  {new Date(c.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  {fmtDateFull(c.date)}
                 </p>
                 <div className="flex justify-between gap-4 mt-1.5">
                   <span className="text-slate-400 font-semibold">{t('chart.stockPrice')}:</span>
@@ -345,7 +431,14 @@ export default function PerformanceChart({
       </div>
 
       {/* Chart Legend / Guide */}
-      {hasDeposits && (
+      {percentMode ? (
+        <div className="flex justify-center text-[10px] text-slate-500 font-semibold">
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-indigo-500 rounded-full" />
+            <span>{t('chart.portfolioChangePercent')}</span>
+          </div>
+        </div>
+      ) : hasDeposits && (
         <div className="flex gap-4 justify-center text-[10px] text-slate-500 font-semibold">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-indigo-500 rounded-full" />

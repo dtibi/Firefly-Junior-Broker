@@ -36,12 +36,18 @@ about saving, patience, ownership, and losing money — which happens, and is th
 ## What the kid sees
 
 ### The vault — the whole picture at a glance
-![Dashboard](assets/screenshots/01-dashboard.png?v=3)
+![Dashboard](assets/screenshots/01-dashboard.png?v=4)
 
 Two accounts, one honest profit figure, and a chart with two lines: what he owns (blue) and what
 was actually put in from outside (dashed). The gap between them is the only real profit. Under it,
 his portfolio table: every stock he owns, and next to each one the two things he can do about it —
 **buy more** or **sell** — without leaving the page.
+
+The chart itself can be pointed at a period — **a week, a month, a year, this year, two or three
+years, or everything** — and switched between shekels and **one percentage**: what the portfolio
+did with the stocks it held, with every deposit and withdrawal divided out, so money arriving never
+looks like a gain and money leaving never looks like a loss. A period longer than the recorded
+history says so in words instead of drawing a straight line across nothing.
 
 ### The market — 62 companies and baskets a child has heard of
 ![Market](assets/screenshots/02-market.png?v=3)
@@ -352,8 +358,8 @@ npm run verify:guardrails  # live checks: bad trades must be refused (server mus
 `npm test` pins the rules that must never regress: allowances are never counted as profit,
 opening balances are counted exactly once, `profit = realized + unrealized`, lots are never merged,
 a pocket-funded lot always returns to the pocket, the three-legged sale, the minimum order and the
-0.01-share floor, all 62 stocks carry Hebrew copy, and the statement labels every split once in
-Hebrew. `npm run verify:guardrails` proves a *running* server still refuses bad money requests —
+0.01-share floor, all 62 stocks carry Hebrew copy, the wealth chart's period math (a deposit
+never reads as profit), and the statement labels every split once in Hebrew. `npm run verify:guardrails` proves a *running* server still refuses bad money requests —
 and refuses to send any request the rules consider legal, so a test can never execute a real trade.
 
 <br>
